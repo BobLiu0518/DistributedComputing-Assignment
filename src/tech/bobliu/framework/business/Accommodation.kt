@@ -1,4 +1,4 @@
-package tech.bobliu.framework
+package tech.bobliu.framework.business
 
 interface Accommodation {
     fun checkin(count: Int)

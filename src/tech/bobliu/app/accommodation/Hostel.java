@@ -1,7 +1,7 @@
 package tech.bobliu.app.accommodation;
 
-import tech.bobliu.framework.Accommodation;
 import tech.bobliu.framework.annotation.Lodging;
+import tech.bobliu.framework.business.Accommodation;
 
 @Lodging
 public class Hostel implements Accommodation {

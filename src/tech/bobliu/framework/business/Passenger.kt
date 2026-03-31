@@ -1,4 +1,4 @@
-package tech.bobliu.framework
+package tech.bobliu.framework.business
 
 class Passenger(val v: Vehicle) {
     fun travel() {

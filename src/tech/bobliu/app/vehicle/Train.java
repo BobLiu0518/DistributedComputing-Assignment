@@ -1,7 +1,7 @@
 package tech.bobliu.app.vehicle;
 
-import tech.bobliu.framework.Vehicle;
 import tech.bobliu.framework.annotation.Transport;
+import tech.bobliu.framework.business.Vehicle;
 
 @Transport
 public class Train implements Vehicle {

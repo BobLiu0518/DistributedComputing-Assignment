@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="EntryPointsManager">
-    <list size="2">
-      <item index="0" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.Lodging" />
-      <item index="1" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.Transportation" />
+    <list size="6">
+      <item index="0" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.AfterLodgingHook" />
+      <item index="1" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.AfterTransportHook" />
+      <item index="2" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.BeforeLodgingHook" />
+      <item index="3" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.BeforeTransportHook" />
+      <item index="4" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.Lodging" />
+      <item index="5" class="java.lang.String" itemvalue="tech.bobliu.framework.annotation.Transport" />
     </list>
   </component>
   <component name="ProjectRootManager" version="2" languageLevel="JDK_25" default="true" project-jdk-name="25" project-jdk-type="JavaSDK">
