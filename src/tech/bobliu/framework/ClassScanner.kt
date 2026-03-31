@@ -1,11 +1,9 @@
-@file:JvmName("ClassScanner")
-
-package tech.bobliu
+package tech.bobliu.framework
 
 import java.io.File
 import java.net.JarURLConnection
 
-fun scan(basePackage: String): List<Class<*>> {
+fun scanClasses(basePackage: String): List<Class<*>> {
     val packagePath = basePackage.replace('.', '/')
     val loader = Thread.currentThread().contextClassLoader
     val classes = mutableListOf<Class<*>>()
@@ -20,7 +18,7 @@ fun scan(basePackage: String): List<Class<*>> {
                     .filter { it.isFile && it.extension == "class" }
                     .forEach { file ->
                         val relative = file.relativeTo(root).invariantSeparatorsPath
-                        val className = "$basePackage.${relative.removeSuffix(".class").replace('/', '.')}"
+                        val className = "${basePackage}.${relative.removeSuffix(".class").replace('/', '.')}"
                         Class.forName(className, false, loader).let { classes.add(it) }
                     }
             }
@@ -28,7 +26,7 @@ fun scan(basePackage: String): List<Class<*>> {
             "jar" -> {
                 (url.openConnection() as JarURLConnection).jarFile.use { jar ->
                     jar.entries().asSequence()
-                        .filter { !it.isDirectory && it.name.startsWith("$packagePath/") && it.name.endsWith(".class") }
+                        .filter { !it.isDirectory && it.name.startsWith("${packagePath}/") && it.name.endsWith(".class") }
                         .forEach { entry ->
                             val className = entry.name.removeSuffix(".class").replace('/', '.')
                             Class.forName(className, false, loader).let { classes.add(it) }
@@ -39,3 +37,15 @@ fun scan(basePackage: String): List<Class<*>> {
     }
     return classes
 }
+
+fun <T : Annotation> List<Class<*>>.associateByAnnotation(
+    annotationClass: Class<T>,
+    keyExtractor: ((T) -> String)? = null
+): Map<String, Class<*>> = this
+    .filter { it.isAnnotationPresent(annotationClass) }
+    .associateBy { clazz ->
+        clazz.getAnnotation(annotationClass)
+            ?.let { keyExtractor?.invoke(it) }
+            ?.takeUnless { it.isEmpty() }
+            ?: clazz.simpleName
+    }

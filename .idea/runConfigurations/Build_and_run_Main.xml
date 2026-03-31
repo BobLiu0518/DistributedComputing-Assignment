@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Build and run Main" type="Application" factoryName="Application">
-    <option name="MAIN_CLASS_NAME" value="tech.bobliu.Main" />
+    <option name="MAIN_CLASS_NAME" value="tech.bobliu.framework.MainKt" />
     <module name="TravelAgency" />
     <method v="2">
       <option name="Make" enabled="true" />
