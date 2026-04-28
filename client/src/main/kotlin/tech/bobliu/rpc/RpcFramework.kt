@@ -1,44 +1,83 @@
 package tech.bobliu.rpc
 
+import tech.bobliu.rpc.annotation.RpcApp
+import tech.bobliu.rpc.annotation.RpcInject
 import tech.bobliu.rpc.annotation.RpcService
 import tech.bobliu.rpc.network.RpcClient
 import tech.bobliu.rpc.proxy.RpcInvocationHandler
 import tech.bobliu.rpc.registry.RegistryClient
+import tech.bobliu.rpc.scanner.ClassScanner
 import java.lang.reflect.Proxy
+import java.util.concurrent.ConcurrentHashMap
 
-object RpcFramework {
-    private lateinit var registryClient: RegistryClient
-    private lateinit var rpcClient: RpcClient
-    private var initialized = false
+class RpcFramework(config: RpcConfig, basePackage: String = "") {
+    private val registryClient = RegistryClient(config.registryHost, config.registryPort)
+    private val rpcClient = RpcClient()
+    private val proxies = ConcurrentHashMap<Class<*>, Any>()
 
-    @JvmStatic
-    fun init(config: RpcConfig) {
-        registryClient = RegistryClient(config.registryHost, config.registryPort)
+    init {
         registryClient.connect()
-
-        rpcClient = RpcClient()
-        initialized = true
+        if (basePackage.isNotEmpty()) {
+            val scanner = ClassScanner(basePackage)
+            for (clazz in scanner.getByAnnotation(RpcService::class.java)) {
+                if (clazz.isInterface) {
+                    @Suppress("UNCHECKED_CAST")
+                    proxies[clazz] = createProxyInternal(clazz as Class<Any>)
+                }
+            }
+        }
     }
 
-    @JvmStatic
-    fun <T : Any> createProxy(interfaceClass: Class<T>): T {
-        check(initialized) { "RpcFramework not initialized. Call RpcFramework.init() first." }
+    fun <T : Any> service(interfaceClass: Class<T>): T {
+        @Suppress("UNCHECKED_CAST")
+        return proxies.getOrPut(interfaceClass) {
+            createProxyInternal(interfaceClass)
+        } as T
+    }
 
+    fun inject(target: Any) {
+        for (field in target.javaClass.declaredFields) {
+            if (field.isAnnotationPresent(RpcInject::class.java)) {
+                field.isAccessible = true
+                field.set(target, service(field.type))
+            }
+        }
+    }
+
+    private fun createProxyInternal(interfaceClass: Class<*>): Any {
         val anno = interfaceClass.getAnnotation(RpcService::class.java)
             ?: throw IllegalArgumentException("${interfaceClass.name} must be annotated with @RpcService")
         val serviceName = anno.value.ifEmpty { interfaceClass.simpleName }
 
-        @Suppress("UNCHECKED_CAST")
         return Proxy.newProxyInstance(
             interfaceClass.classLoader,
             arrayOf<Class<*>>(interfaceClass),
             RpcInvocationHandler(serviceName, registryClient, rpcClient),
-        ) as T
+        )
     }
 
-    @JvmStatic
     fun shutdown() {
         rpcClient.shutdown()
         registryClient.shutdown()
+    }
+
+    companion object {
+        @JvmStatic
+        fun main(args: Array<String>) {
+            val appClass = ClassScanner.findAnnotatedClass(RpcApp::class.java)
+            val appAnno = appClass.getAnnotation(RpcApp::class.java)
+
+            val basePackage = appAnno.basePackage.ifEmpty { appClass.packageName }
+            val config = RpcConfig(appAnno.registryHost, appAnno.registryPort)
+
+            val fw = RpcFramework(config, basePackage)
+            try {
+                val app = appClass.getDeclaredConstructor().newInstance()
+                fw.inject(app)
+                appClass.getMethod("run").invoke(app)
+            } finally {
+                fw.shutdown()
+            }
+        }
     }
 }

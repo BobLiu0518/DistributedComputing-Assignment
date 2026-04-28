@@ -62,7 +62,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>1.6.0</version>
                 <configuration>
-                    <mainClass>tech.bobliu.rpc.app.RpcClientDemo</mainClass>
+                    <mainClass>tech.bobliu.rpc.RpcFramework</mainClass>
                 </configuration>
             </plugin>
         </plugins>
