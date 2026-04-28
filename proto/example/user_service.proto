@@ -1,6 +1,8 @@
 syntax = "proto3";
 package example;
 option go_package = "rpc-server/pb/example";
+option java_package = "tech.bobliu.rpc.proto.example";
+option java_multiple_files = true;
 
 message GetUserRequest {
   int64 id = 1;
