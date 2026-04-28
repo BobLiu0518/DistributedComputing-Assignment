@@ -1,6 +1,5 @@
 package tech.bobliu.rpc.network
 
-import com.google.protobuf.MessageLite
 import io.netty.bootstrap.Bootstrap
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
@@ -10,6 +9,8 @@ import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.LengthFieldPrepender
+import io.netty.handler.timeout.IdleStateHandler
+import tech.bobliu.rpc.proto.RpcRequest
 import tech.bobliu.rpc.proto.RpcResponse
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -20,21 +21,21 @@ class RpcClient {
     private val channels = ConcurrentHashMap<String, Channel>()
     private val pendingRequests = ConcurrentHashMap<String, CompletableFuture<RpcResponse>>()
 
-    fun call(request: MessageLite, host: String, port: Int): RpcResponse {
+    fun call(request: RpcRequest, host: String, port: Int): RpcResponse {
         val channel = getOrCreateChannel(host, port)
-        val rpcRequest = request as? tech.bobliu.rpc.proto.RpcRequest
-            ?: throw IllegalArgumentException("Expected RpcRequest")
         val future = CompletableFuture<RpcResponse>()
-        pendingRequests[rpcRequest.requestId] = future
+        pendingRequests[request.requestId] = future
 
         try {
-            val bytes = rpcRequest.toByteArray()
+            val bytes = request.toByteArray()
             channel.writeAndFlush(Unpooled.wrappedBuffer(bytes)).sync()
             return future.get(10, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            pendingRequests.remove(rpcRequest.requestId)
+            pendingRequests.remove(request.requestId)
             if (e is java.util.concurrent.TimeoutException) {
-                throw RuntimeException("RPC call timeout for ${rpcRequest.service}.${rpcRequest.method}")
+                throw RuntimeException(
+                    "RPC call timeout for ${request.service}.${request.method}"
+                )
             }
             throw RuntimeException("RPC call failed: ${e.message}", e)
         }
@@ -51,23 +52,20 @@ class RpcClient {
                 .handler(object : ChannelInitializer<SocketChannel>() {
                     override fun initChannel(ch: SocketChannel) {
                         ch.pipeline().addLast(
+                            IdleStateHandler(0, 0, 60),
                             LengthFieldBasedFrameDecoder(16 * 1024 * 1024, 0, 4, 0, 4),
                             LengthFieldPrepender(4),
-                            ResponseHandler(pendingRequests),
+                            ResponseHandler(pendingRequests, key, channels),
                         )
                     }
                 })
             try {
                 bootstrap.connect(host, port).sync().channel()
             } catch (e: Exception) {
+                channels.remove(key)
                 throw RuntimeException("Failed to connect to $host:$port: ${e.message}", e)
             }
         }
-    }
-
-    fun removeChannel(host: String, port: Int) {
-        val key = "$host:$port"
-        channels.remove(key)?.close()
     }
 
     fun shutdown() {
@@ -78,6 +76,8 @@ class RpcClient {
 
     private class ResponseHandler(
         private val pending: ConcurrentHashMap<String, CompletableFuture<RpcResponse>>,
+        private val channelKey: String,
+        private val channels: ConcurrentHashMap<String, Channel>,
     ) : ChannelInboundHandlerAdapter() {
         override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
             val buf = msg as ByteBuf
@@ -91,9 +91,18 @@ class RpcClient {
         }
 
         override fun channelInactive(ctx: ChannelHandlerContext) {
-            pending.values.forEach { it.completeExceptionally(RuntimeException("Connection closed")) }
+            channels.remove(channelKey)
+            pending.values.forEach {
+                it.completeExceptionally(RuntimeException("Connection closed"))
+            }
             pending.clear()
             super.channelInactive(ctx)
+        }
+
+        override fun userEventTriggered(ctx: ChannelHandlerContext, evt: Any) {
+            if (evt is io.netty.handler.timeout.IdleStateEvent) {
+                ctx.close()
+            }
         }
 
         override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {

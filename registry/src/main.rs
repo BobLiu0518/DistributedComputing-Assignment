@@ -12,7 +12,7 @@ use registry::store::ServiceStore;
 async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let config = Config::from_env();
+    let config = Config::load();
     log::info!(
         "Starting registry on {} (heartbeat_timeout={}s, health_check_interval={}s)",
         config.listen_addr,
@@ -35,5 +35,13 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let server = network::server::Server::new(config, store, notifier);
-    server.run().await
+
+    tokio::select! {
+        result = server.run() => { result?; }
+        _ = tokio::signal::ctrl_c() => {
+            log::info!("Shutdown signal received, exiting");
+        }
+    }
+
+    Ok(())
 }

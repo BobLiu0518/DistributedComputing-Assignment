@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -18,7 +19,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	selfPort, _ := strconv.Atoi(getEnv("RPC_PORT", "8080"))
+	selfPort, err := strconv.Atoi(getEnv("RPC_PORT", "8080"))
+	if err != nil {
+		log.Fatalf("[main] invalid RPC_PORT: %v", err)
+	}
 	serviceName := getEnv("SERVICE_NAME", "UserService")
 
 	r := router.New()
@@ -32,7 +36,7 @@ func main() {
 	)
 
 	srv := server.New(
-		getEnv("RPC_ADDR", "0.0.0.0:"+getEnv("RPC_PORT", "8080")),
+		fmt.Sprintf("0.0.0.0:%d", selfPort),
 		r,
 		regClient,
 	)
@@ -43,7 +47,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("[main] started service=%s", serviceName)
+	log.Printf("[main] started service=%s on port %d", serviceName, selfPort)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

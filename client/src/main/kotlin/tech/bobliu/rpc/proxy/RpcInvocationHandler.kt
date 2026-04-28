@@ -21,7 +21,7 @@ class RpcInvocationHandler(
 
     override fun invoke(proxy: Any, method: Method, args: Array<out Any>?): Any? {
         if (method.declaringClass == Any::class.java) {
-            return method.invoke(this, *(args ?: emptyArray()))
+            return method.invoke(proxy, *(args ?: emptyArray()))
         }
 
         val rpcMethod = method.getAnnotation(RpcMethod::class.java)

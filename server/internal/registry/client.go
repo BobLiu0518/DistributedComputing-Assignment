@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"time"
@@ -34,7 +35,7 @@ func NewClient(registryAddr, selfIP string, selfPort int, serviceName string) *C
 func (c *Client) Register(ctx context.Context) error {
 	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", c.registryAddr)
 	if err != nil {
-		return err
+		return fmt.Errorf("connect to registry: %w", err)
 	}
 	c.conn = conn
 
@@ -50,33 +51,41 @@ func (c *Client) Register(ctx context.Context) error {
 
 	data, err := proto.Marshal(msg)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal register: %w", err)
 	}
 	if err := codec.WriteFrame(conn, data); err != nil {
-		return err
+		return fmt.Errorf("write register: %w", err)
 	}
 
 	respData, err := codec.ReadFrame(conn)
 	if err != nil {
-		return err
+		return fmt.Errorf("read register response: %w", err)
 	}
 
 	resp := &pb.RegistryMessage{}
 	if err := proto.Unmarshal(respData, resp); err != nil {
-		return err
+		return fmt.Errorf("unmarshal register response: %w", err)
 	}
 
-	if r, ok := resp.Payload.(*pb.RegistryMessage_Response); ok && r != nil {
-		log.Printf("[registry] response: success=%v message=%s",
-			r.Response.Success, r.Response.Message)
+	r, ok := resp.Payload.(*pb.RegistryMessage_Response)
+	if !ok || r == nil || !r.Response.Success {
+		msg := "unknown error"
+		if r != nil {
+			msg = r.Response.Message
+		}
+		return fmt.Errorf("registration failed: %s", msg)
 	}
 
+	log.Printf("[registry] registered successfully: %s", r.Response.Message)
 	return nil
 }
 
 func (c *Client) HeartbeatLoop(ctx context.Context) {
 	ticker := time.NewTicker(c.heartbeatInterval)
 	defer ticker.Stop()
+
+	failCount := 0
+	const maxFailBeforeReconnect = 3
 
 	for {
 		select {
@@ -97,8 +106,22 @@ func (c *Client) HeartbeatLoop(ctx context.Context) {
 				continue
 			}
 			if err := codec.WriteFrame(c.conn, data); err != nil {
-				log.Printf("[registry] heartbeat failed: %v", err)
-				return
+				failCount++
+				log.Printf("[registry] heartbeat failed (%d/%d): %v",
+					failCount, maxFailBeforeReconnect, err)
+
+				if failCount >= maxFailBeforeReconnect {
+					log.Printf("[registry] attempting reconnect...")
+					c.conn.Close()
+					if regErr := c.Register(ctx); regErr != nil {
+						log.Printf("[registry] reconnect failed: %v", regErr)
+						return
+					}
+					log.Printf("[registry] reconnected successfully")
+					failCount = 0
+				}
+			} else {
+				failCount = 0
 			}
 		}
 	}

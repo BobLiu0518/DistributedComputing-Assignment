@@ -53,7 +53,13 @@ class RegistryClient(
         val bytes = subscribeMsg.toByteArray()
         future.channel().writeAndFlush(Unpooled.wrappedBuffer(bytes)).sync()
 
-        latch.await(5, TimeUnit.SECONDS)
+        val received = latch.await(5, TimeUnit.SECONDS)
+        if (!received) {
+            channel?.close()
+            throw RuntimeException(
+                "Failed to receive service list from registry within 5 seconds"
+            )
+        }
     }
 
     fun getInstances(serviceName: String): List<ServiceInfo> =

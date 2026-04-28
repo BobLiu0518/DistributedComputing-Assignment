@@ -137,6 +137,22 @@ async fn handle_connection(
                             }
                             registry_message::Payload::Heartbeat(req) => {
                                 let found = store.heartbeat(&req.ip, req.port).await;
+                                let response = RegistryMessage {
+                                    payload: Some(registry_message::Payload::Response(
+                                        RegistryResponse {
+                                            success: found,
+                                            message: if found {
+                                                "alive".into()
+                                            } else {
+                                                "unknown instance".into()
+                                            },
+                                        },
+                                    )),
+                                };
+                                if let Err(e) = framed.send(response).await {
+                                    log::warn!("Failed to send heartbeat response: {}", e);
+                                    break;
+                                }
                                 if !found {
                                     log::warn!(
                                         "Heartbeat from unknown instance {}:{}",

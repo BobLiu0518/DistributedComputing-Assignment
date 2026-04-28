@@ -5,6 +5,9 @@ use tokio_util::codec::{Decoder, Encoder};
 
 use crate::proto::RegistryMessage;
 
+const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+const HEADER_LEN: usize = 4;
+
 pub struct RegistryCodec;
 
 impl RegistryCodec {
@@ -12,8 +15,6 @@ impl RegistryCodec {
         Self
     }
 }
-
-const HEADER_LEN: usize = 4;
 
 impl Decoder for RegistryCodec {
     type Item = RegistryMessage;
@@ -25,6 +26,14 @@ impl Decoder for RegistryCodec {
         }
 
         let len = u32::from_be_bytes([src[0], src[1], src[2], src[3]]) as usize;
+
+        if len > MAX_FRAME_SIZE {
+            return Err(anyhow::anyhow!(
+                "frame size {} exceeds max {}",
+                len,
+                MAX_FRAME_SIZE
+            ));
+        }
 
         if src.len() < HEADER_LEN + len {
             src.reserve(HEADER_LEN + len - src.len());
