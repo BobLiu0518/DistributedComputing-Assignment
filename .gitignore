@@ -1,1 +1,18 @@
 reference/
+
+# Rust
+registry/target/
+
+# Go
+server/pb/
+server/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

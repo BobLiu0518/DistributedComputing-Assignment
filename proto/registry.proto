@@ -1,0 +1,44 @@
+syntax = "proto3";
+package registry;
+option go_package = "rpc-server/pb";
+
+message RegisterRequest {
+  string ip = 1;
+  int32 port = 2;
+  string service = 3;
+}
+
+message HeartbeatRequest {
+  string ip = 1;
+  int32 port = 2;
+}
+
+message SubscribeRequest {}
+
+message RegistryResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ServiceInfo {
+  string ip = 1;
+  int32 port = 2;
+}
+
+message ServiceListEntry {
+  repeated ServiceInfo instances = 1;
+}
+
+message ServiceList {
+  map<string, ServiceListEntry> services = 1;
+}
+
+message RegistryMessage {
+  oneof payload {
+    RegisterRequest register = 1;
+    HeartbeatRequest heartbeat = 2;
+    SubscribeRequest subscribe = 3;
+    RegistryResponse response = 4;
+    ServiceList service_list = 5;
+  }
+}
