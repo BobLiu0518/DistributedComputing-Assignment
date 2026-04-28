@@ -1,0 +1,13 @@
+syntax = "proto3";
+package example;
+option go_package = "rpc-server/pb/example";
+
+message GetUserRequest {
+  int64 id = 1;
+}
+
+message GetUserResponse {
+  int64 id = 1;
+  string name = 2;
+  int32 age = 3;
+}

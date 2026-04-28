@@ -1,17 +1,10 @@
 reference/
 
-# Rust
-registry/target/
-
-# Go
-server/pb/
-server/vendor/
-
-# IDE
-.idea/
+# IDE / Editor
 .vscode/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store

@@ -1,0 +1,8 @@
+# Generated proto code
+pb/
+
+# Build output
+bin/
+
+# Vendor
+vendor/
