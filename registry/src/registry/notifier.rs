@@ -6,8 +6,8 @@ pub struct Notifier {
 }
 
 impl Notifier {
-    pub fn new() -> Self {
-        let (tx, _) = broadcast::channel(16);
+    pub fn new(capacity: usize) -> Self {
+        let (tx, _) = broadcast::channel(capacity);
         Self { tx }
     }
 

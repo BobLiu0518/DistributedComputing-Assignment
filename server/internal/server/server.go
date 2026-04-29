@@ -18,6 +18,7 @@ type Server struct {
 	addr     string
 	router   *router.Router
 	registry *registry.Client
+	listener net.Listener
 }
 
 func New(addr string, r *router.Router, reg *registry.Client) *Server {
@@ -39,7 +40,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	s.listener = listener
 	log.Printf("[server] listening on %s", s.addr)
 
 	for {
@@ -58,6 +59,9 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 func (s *Server) Stop() {
+	if s.listener != nil {
+		s.listener.Close()
+	}
 	s.registry.Stop()
 }
 

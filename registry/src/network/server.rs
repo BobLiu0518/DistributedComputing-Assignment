@@ -57,13 +57,9 @@ async fn handle_connection(
     let mut framed = Framed::new(socket, RegistryCodec::new());
     let mut registered_instances: Vec<(String, i32)> = Vec::new();
 
-    let is_client = handle_server_messages(
-        &mut framed,
-        &store,
-        &notifier_tx,
-        &mut registered_instances,
-    )
-    .await?;
+    let is_client =
+        handle_server_messages(&mut framed, &store, &notifier_tx, &mut registered_instances)
+            .await?;
 
     if is_client {
         handle_client_notifications(&mut framed, &store, notifier_rx).await?;
@@ -86,14 +82,8 @@ async fn handle_server_messages(
                 if let Some(payload) = msg.payload {
                     match payload {
                         registry_message::Payload::Register(req) => {
-                            handle_register(
-                                framed,
-                                store,
-                                notifier_tx,
-                                registered_instances,
-                                req,
-                            )
-                            .await?;
+                            handle_register(framed, store, notifier_tx, registered_instances, req)
+                                .await?;
                         }
                         registry_message::Payload::Heartbeat(req) => {
                             handle_heartbeat(framed, store, req).await?;
@@ -176,11 +166,7 @@ async fn handle_heartbeat(
         return Err(e.into());
     }
     if !found {
-        log::warn!(
-            "Heartbeat from unknown instance {}:{}",
-            peer_ip,
-            req.port,
-        );
+        log::warn!("Heartbeat from unknown instance {}:{}", peer_ip, req.port,);
     }
     Ok(())
 }

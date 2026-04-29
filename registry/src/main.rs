@@ -26,14 +26,15 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::load();
     log::info!(
-        "Starting registry on {} (heartbeat_timeout={}s, health_check_interval={}s)",
+        "Starting registry on {} (heartbeat_timeout={}s, health_check_interval={}s, broadcast_capacity={})",
         config.listen_addr,
         config.heartbeat_timeout_secs,
         config.health_check_interval_secs,
+        config.broadcast_channel_capacity,
     );
 
     let store = ServiceStore::new();
-    let notifier = Notifier::new();
+    let notifier = Notifier::new(config.broadcast_channel_capacity);
 
     let health_checker = HealthChecker::new(
         store.clone_handle(),

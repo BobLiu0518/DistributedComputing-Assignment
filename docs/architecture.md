@@ -97,17 +97,15 @@ package registry;
 
 // --- 服务端 → 注册中心 ---
 
-// 服务注册
+// 服务注册（IP 由注册中心从连接对端地址推导，防止伪造）
 message RegisterRequest {
-  string ip   = 1;
-  int32  port = 2;
-  string service = 3;  // 该服务端支持的单个服务名
+  int32  port = 1;
+  string service = 2;  // 该服务端支持的单个服务名
 }
 
-// 心跳
+// 心跳（IP 同样由注册中心推导）
 message HeartbeatRequest {
-  string ip   = 1;
-  int32  port = 2;
+  int32  port = 1;
 }
 
 // --- 注册中心 → 服务端 / 调用端 ---
@@ -203,7 +201,6 @@ RPC/
 │   ├── pom.xml
 │   └── src/main/kotlin/tech/bobliu/rpc/
 │       ├── RpcFramework.kt        #   框架入口：初始化、代理创建
-│       ├── RpcConfig.kt           #   客户端配置
 │       ├── annotation/
 │       │   ├── RpcService.kt     #   @RpcService 注解
 │       │   ├── RpcMethod.kt      #   @RpcMethod 注解

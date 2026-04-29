@@ -38,11 +38,20 @@ Java 调用端 ──RPC 调用──→ Go 服务端
 - protoc 34+（Protobuf 编译器）
 - protoc-gen-go（`go install google.golang.org/protobuf/cmd/protoc-gen-go@latest`）
 
-### 1. 生成服务端 Protobuf 代码
+### 1. 生成 Protobuf 代码
+
+**服务端（Go）**
 
 ```bash
 cd server
 go generate ./...
+```
+
+**调用端（Java）**
+
+```bash
+cd client
+mvn protobuf:compile
 ```
 
 ### 2. 启动注册中心
@@ -61,7 +70,7 @@ go run ./cmd/server/
 # 默认监听 0.0.0.0:8080，注册到 localhost:9000
 ```
 
-### 3. 运行调用端
+### 4. 运行调用端
 
 ```bash
 cd client
@@ -77,7 +86,7 @@ REGISTRY_ADDR=0.0.0.0:9999 cargo run
 # 服务端
 RPC_PORT=9090 SERVICE_NAME=OrderService go run ./cmd/server/
 
-# 调用端（修改 RpcClientDemo.java 中的 RpcConfig 参数）
+# 调用端（修改 @RpcApp 注解中的 registryHost / registryPort 参数）
 ```
 
 ## 开发者视角

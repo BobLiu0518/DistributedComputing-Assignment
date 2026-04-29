@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,5 +40,7 @@ func main() {
 	cmd := exec.Command("protoc", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("protoc failed: %v", err)
+	}
 }

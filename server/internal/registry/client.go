@@ -112,6 +112,24 @@ func (c *Client) Run(ctx context.Context) {
 		default:
 		}
 
+		if err := c.Register(ctx); err != nil {
+			log.Printf("[registry] register failed, retry in %v: %v", backoff, err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-c.stopCh:
+				return
+			default:
+			}
+			time.Sleep(backoff)
+			if backoff < maxBackoff {
+				backoff *= 2
+			}
+			continue
+		}
+
+		backoff = time.Second
+
 		ctxReader, cancelReader := context.WithCancel(ctx)
 		doneCh := make(chan struct{})
 
