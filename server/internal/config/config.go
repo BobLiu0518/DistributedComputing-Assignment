@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	DatabaseURL            string `json:"database_url"`
 	RegistryAddr           string `json:"registry_addr"`
 	Port                   int    `json:"port"`
 	ServiceName            string `json:"service_name"`
@@ -31,7 +32,7 @@ func Load() *Config {
 
 func defaultConfig() *Config {
 	return &Config{
-		RegistryAddr:           "localhost:9000",
+		DatabaseURL:            "postgres://postgres:postgres@localhost:5432/rpc?sslmode=disable",
 		Port:                   8080,
 		ServiceName:            "UserService",
 		HeartbeatIntervalSec:   10,
@@ -63,6 +64,9 @@ func loadFromFile(cfg *Config) error {
 }
 
 func overrideFromEnv(cfg *Config) {
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.DatabaseURL = v
+	}
 	if v := os.Getenv("REGISTRY_ADDR"); v != "" {
 		cfg.RegistryAddr = v
 	}

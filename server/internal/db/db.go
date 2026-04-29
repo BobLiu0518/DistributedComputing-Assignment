@@ -5,23 +5,25 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/lib/pq"
 )
 
-var driverName = "sqlite"
-
-func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open(driverName, path)
+func Open(databaseURL string) (*sql.DB, error) {
+	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("ping db: %w", err)
+	}
+
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS users (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id BIGSERIAL PRIMARY KEY,
 			name TEXT UNIQUE NOT NULL,
 			password_hash TEXT NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMP DEFAULT NOW()
 		)
 	`); err != nil {
 		return nil, fmt.Errorf("create users table: %w", err)
@@ -29,11 +31,11 @@ func Open(path string) (*sql.DB, error) {
 
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS cards (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL,
+			id BIGSERIAL PRIMARY KEY,
+			user_id BIGINT NOT NULL,
 			name TEXT NOT NULL,
 			stars INTEGER NOT NULL,
-			drawn_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			drawn_at TIMESTAMP DEFAULT NOW()
 		)
 	`); err != nil {
 		return nil, fmt.Errorf("create cards table: %w", err)
