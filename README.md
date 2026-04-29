@@ -41,6 +41,7 @@ Java 调用端 ──RPC 调用──→ Go 服务端
 - JDK 25 + Maven 3.9+
 - Go 1.25+
 - Rust 1.93+
+- PostgreSQL 15+（`createdb rpc` 创建数据库）
 - protoc 34+（Protobuf 编译器）
 - protoc-gen-go（`go install google.golang.org/protobuf/cmd/protoc-gen-go@latest`）
 
@@ -129,6 +130,7 @@ REGISTRY_ADDR=0.0.0.0:9999 cargo run
 
 ```json
 {
+  "database_url": "postgres://postgres:postgres@localhost:5432/rpc?sslmode=disable",
   "registry_addr": "localhost:9000",
   "port": 8082,
   "service_name": "GachaService",
