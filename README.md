@@ -31,7 +31,7 @@ Java 调用端 ──RPC 调用──→ Go 服务端
 - **嵌入式数据库**：Go 端内置 SQLite（纯 Go，零 CGO），`//go:embed` 编译进角色表
 - **结构化日志**：`log/slog` 标准库，请求级别带 `request_id` / `peer` / `service` / `method`
 - **服务发现**：调用端自动从注册中心获取服务地址，服务端上下线实时推送
-- **负载均衡**：随机选取健康实例（GachaService 部署双份，自动轮换）
+- **负载均衡**：随机选取健康实例（`debug=true` 时输出选中实例）
 - **容错**：指数退避重试（200ms → 400ms → 800ms → …）
 
 ## 快速开始
@@ -98,8 +98,8 @@ RPC Gacha > login BobLiu 123456
   登录成功! 欢迎回来, BobLiu
 
 RPC Gacha > draw 2
-  ★★★★★★: 维什戴尔           [GachaService:8082]
-  ★★★★★★: 缄默德克萨斯        [GachaService:8082]   ← 自动切换实例
+  ★★★★★★: 维什戴尔
+  ★★★★★★: 缄默德克萨斯
 
 RPC Gacha > quit
   再见~
