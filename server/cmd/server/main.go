@@ -1,3 +1,5 @@
+//go:generate go run ./../genproto/
+
 package main
 
 import (

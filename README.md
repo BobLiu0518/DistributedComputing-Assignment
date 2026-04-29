@@ -36,8 +36,16 @@ Java 调用端 ──RPC 调用──→ Go 服务端
 - Go 1.25+
 - Rust 1.93+
 - protoc 34+（Protobuf 编译器）
+- protoc-gen-go（`go install google.golang.org/protobuf/cmd/protoc-gen-go@latest`）
 
-### 1. 启动注册中心
+### 1. 生成服务端 Protobuf 代码
+
+```bash
+cd server
+go generate ./...
+```
+
+### 2. 启动注册中心
 
 ```bash
 cd registry
@@ -45,7 +53,7 @@ cargo run
 # 默认监听 0.0.0.0:9000
 ```
 
-### 2. 启动服务端
+### 3. 启动服务端
 
 ```bash
 cd server
