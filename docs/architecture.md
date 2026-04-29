@@ -183,38 +183,38 @@ RPC/
 │       │   ├── store.rs          #   服务存储（内存 HashMap）：增删查
 │       │   ├── health.rs         #   健康检查：心跳时间戳、过期检测
 │       │   └── notifier.rs       #   变更推送：通知所有连接的调用端
-│       └── proto/                #   prost 编译生成的 Rust 代码
+│       └── proto.rs             #   prost 编译生成的 Rust 代码（include! from OUT_DIR）
 │
 ├── server/                       # 服务端 (Go)
 │   ├── go.mod
-│   ├── cmd/main.go               #   入口
-│   ├── config/config.go          #   配置
-│   ├── network/
-│   │   ├── server.go             #   TCP 服务端：监听、接受连接
-│   │   └── codec.go              #   帧编解码
-│   ├── registry/
-│   │   └── client.go             #   注册中心客户端：注册、心跳
-│   ├── router/
-│   │   └── router.go             #   方法路由：service.method → handler
-│   ├── handler/
-│   │   └── handler.go            #   通用处理：反序列化 → 调用 → 序列化 → 响应
-│   └── proto/                    #   protoc 编译生成的 Go 代码
+│   ├── cmd/server/main.go        #   入口
+│   ├── internal/
+│   │   ├── server/
+│   │   │   └── server.go         #   TCP 服务端：监听、接受连接
+│   │   ├── codec/
+│   │   │   └── codec.go          #   帧编解码
+│   │   ├── registry/
+│   │   │   └── client.go         #   注册中心客户端：注册、心跳
+│   │   └── router/
+│   │       └── router.go         #   方法路由：service.method → handler
+│   └── pb/                       #   protoc 编译生成的 Go 代码
 │
 ├── client/                       # 调用端 (Kotlin/Java)
-│   ├── build.gradle.kts
+│   ├── pom.xml
 │   └── src/main/kotlin/tech/bobliu/rpc/
+│       ├── RpcFramework.kt        #   框架入口：初始化、代理创建
+│       ├── RpcConfig.kt           #   客户端配置
 │       ├── annotation/
 │       │   ├── RpcService.kt     #   @RpcService 注解
-│       │   └── RpcMethod.kt      #   @RpcMethod 注解
+│       │   ├── RpcMethod.kt      #   @RpcMethod 注解
+│       │   ├── RpcApp.kt         #   @RpcApp 入口注解
+│       │   └── RpcInject.kt      #   @RpcInject 依赖注入
 │       ├── scanner/
-│       │   └── ClassScanner.kt   #   类路径扫描（已有基础版本）
+│       │   └── ClassScanner.kt   #   类路径扫描
 │       ├── proxy/
-│       │   └── RpcProxyFactory.kt #  动态代理生成（JDK Proxy）
-│       ├── serialize/
-│       │   └── ProtobufBridge.kt #  序列化桥接：方法注解 → Protobuf 构造
+│       │   └── RpcInvocationHandler.kt # 动态代理 InvocationHandler
 │       ├── network/
-│       │   ├── RpcClient.kt      #   TCP 客户端（Netty）：连接池、编码/解码
-│       │   └── ConnectionPool.kt #   连接池管理
+│       │   └── RpcClient.kt      #   TCP 客户端（Netty）：连接池、编码/解码
 │       ├── registry/
 │       │   └── RegistryClient.kt #   注册中心客户端：发现服务、订阅更新
 │       ├── balance/
@@ -242,22 +242,21 @@ RPC/
 
 **关键设计决策：**
 
-- 存储结构：`serviceName → [(ip, port, lastHeartbeat), ...]`
+- 存储结构：`serviceName → [(ip, port, lastHeartbeat), ...]`，额外维护 `(ip, port) → serviceName` 索引
 - 因为每个服务端只提供一个服务（简化设计），服务端地址 = (ip, port) 作为唯一连接标识
 - 同一个服务名下可以有多个实例（扩展性考虑）
-- 调用端列表单独维护，用于推送通知
+- 调用端列表单独维护（`Notifier` broadcast channel），用于推送通知
+- 连接关闭时立即清理该连接注册的所有实例（`deregister`）；心跳超时（默认 30s）兜底
 
 ### 4.3 服务端模块 (Go)
 
 | 模块 | 文件 | 职责 |
 |------|------|------|
-| **入口** | `cmd/main.go` | 加载配置，连接注册中心，注册服务，启动 RPC 监听 |
-| **配置** | `config/config.go` | RPC 监听地址、注册中心地址、注册的服务名 |
-| **网络-服务端** | `network/server.go` | `net.Listen` 监听，每个连接 goroutine 处理 |
-| **网络-编解码** | `network/codec.go` | 帧读写：`[4字节长度][protobuf 消息体]` |
-| **注册客户端** | `registry/client.go` | 连接注册中心，发送注册请求，启动定时心跳 goroutine |
-| **方法路由** | `router/router.go` | `map[string]HandlerFunc`，key 为 `"service.method"` |
-| **通用处理** | `handler/handler.go` | 接收 `RpcRequest` → 路由到处理函数 → 构造 `RpcResponse`（含错误） |
+| **入口** | `cmd/server/main.go` | 加载配置（环境变量），注册 handler，启动 RPC 监听 |
+| **网络-服务端** | `internal/server/server.go` | `net.Listen` 监听，每个连接 goroutine 处理，每个请求 goroutine 异步执行 handler |
+| **网络-编解码** | `internal/codec/codec.go` | 帧读写：`[4字节长度][protobuf 消息体]`（35 行） |
+| **注册客户端** | `internal/registry/client.go` | 连接注册中心，发送注册请求，启动定时心跳 goroutine 和 reader goroutine |
+| **方法路由** | `internal/router/router.go` | `map[string]HandlerFunc`，key 为 `"service.method"` |
 
 **关键设计决策：**
 
@@ -265,30 +264,30 @@ RPC/
 - Handler 的签名：`func(ctx context.Context, payload []byte) ([]byte, error)`
   - 业务层负责将 `payload` 反序列化为具体类型
   - 框架层只负责路由和错误封装
-- goroutine 模型：每个 TCP 连接一个读循环 goroutine
+- goroutine 模型：每个 TCP 连接一个读循环 goroutine，每个请求通过独立 goroutine 异步执行 handler，写操作通过 `sync.Mutex` 串行化
 
 ### 4.4 调用端模块 (Kotlin/Java)
 
 | 模块 | 文件 | 职责 |
 |------|------|------|
+| **框架入口** | `RpcFramework.kt` | 初始化注册中心连接、创建 JDK 动态代理 |
 | **注解** | `annotation/RpcService.kt` | 标记接口为 RPC 服务，`value` 指定服务名 |
 | **注解** | `annotation/RpcMethod.kt` | 标记方法，`requestType` / `responseType` 指定 Protobuf 类 |
 | **扫描器** | `scanner/ClassScanner.kt` | 扫描类路径，找出所有 `@RpcService` 接口 |
-| **代理工厂** | `proxy/RpcProxyFactory.kt` | 为每个接口创建 `java.lang.reflect.Proxy`，拦截方法调用 |
-| **序列化桥接** | `serialize/ProtobufBridge.kt` | 从 `@RpcMethod` 注解获取 Protobuf 类 → 反射调用 `parseFrom()` / `toByteArray()` |
-| **网络客户端** | `network/RpcClient.kt` | Netty `Bootstrap`，封装连接、发送、接收 |
-| **连接池** | `network/ConnectionPool.kt` | `Map<address, Channel>`，惰性创建，心跳保活 |
-| **注册客户端** | `registry/RegistryClient.kt` | 连接注册中心，获取服务列表，订阅变更推送 |
+| **代理** | `proxy/RpcInvocationHandler.kt` | `InvocationHandler` 实现：序列化 → 负载均衡 → 网络调用 → 反序列化 |
+| **网络客户端** | `network/RpcClient.kt` | Netty `Bootstrap`，封装连接池（`channels` map）、发送、接收 |
+| **注册客户端** | `registry/RegistryClient.kt` | 连接注册中心，获取服务列表（订阅推送），断连自动重连 |
 | **负载均衡** | `balance/LoadBalancer.kt` | 从健康实例中随机选取 |
-| **容错** | `fault/FaultTolerance.kt` | 指数退避重试（1s → 2s → 4s …），超过最大次数抛异常 |
+| **容错** | `fault/FaultTolerance.kt` | 指数退避重试（200ms → 400ms → 800ms …），最多 3 次重试（共 4 次尝试）后抛异常 |
 | **异常** | `exception/RpcException.kt` | 封装 `Error.code` 和 `Error.message` |
 
 **关键设计决策：**
 
 - 动态代理使用 JDK 原生 `java.lang.reflect.Proxy`（只代理接口，不需要 CGLIB）
 - `@RpcMethod` 必须携带 `requestType` 和 `responseType`，框架据此反射调用 Protobuf 序列化方法
-- 发现流程：首次调用某服务 → 查本地缓存 → 缓存未命中则向注册中心查询 → 建立连接 → 缓存
-- 故障转移：调用失败 → 标记该实例为不可用 → 从注册中心获取最新列表 → 重试另一个实例
+- 发现流程：服务列表由注册中心推送维护到 `serviceCache`；调用时从缓存获取实例列表，缓存未命中则抛出异常
+- 故障转移：调用失败时通过 `FaultTolerance` 重试整个调用流程（含重新选择实例），不单独标记实例不可用
+- 注册中心断连时清除本地缓存并通知监听者，后台自动重连；重连成功后重新订阅并更新缓存
 
 ---
 
@@ -428,12 +427,12 @@ throw RpcException(code=500, message="user not found: id=999")
 
 | 场景 | 策略 |
 |------|------|
-| 调用端连接注册中心失败 | 启动失败，直接报错退出（注册中心是基础依赖） |
-| 调用端与注册中心断连 | 使用本地缓存的服务列表继续工作；后台重连注册中心 |
-| 调用端连接服务端失败 | 尝试同一服务的其他实例；都失败则向注册中心查询更新列表 |
-| RPC 调用超时 | 重试（指数退避：1s → 2s → 4s）；超过 3 次抛出 RpcException |
+| 调用端连接注册中心失败 | 指数退避重试（1s → 2s → 4s … 上限 30s），重试耗尽后抛出异常 |
+| 调用端与注册中心断连 | 清除本地缓存、通知监听者服务变空；后台指数退避重连注册中心 |
+| 调用端连接服务端失败 | 重试整个调用流程（含重新选择实例），可能命中同一服务的其他实例 |
+| RPC 调用超时 | 重试（指数退避：200ms → 400ms → 800ms … 上限 3s）；最多 3 次重试后抛出 RpcException |
 | 服务端实例全部不可用 | 抛出 RpcException，提示服务不可用 |
-| 服务端与注册中心断连 | 注册中心心跳超时后将其移除，推送更新给所有调用端 |
+| 服务端与注册中心断连 | 注册中心连接断开时立即清理该连接注册的实例；心跳超时兜底（移除并推送更新） |
 
 ### 6.3 帧协议
 
@@ -448,8 +447,8 @@ throw RpcException(code=500, message="user not found: id=999")
 
 这是 TCP 流式传输下的标准做法。接收方先读 4 字节确定消息长度，再读对应长度的字节，解决粘包/拆包问题。
 
-- Java (Netty)：使用 `LengthFieldBasedFrameDecoder` + `ProtobufDecoder`
-- Go：自实现 `codec.go`（约 30 行）
+- Java (Netty)：使用 `LengthFieldBasedFrameDecoder` + `LengthFieldPrepender`
+- Go：自实现 `codec.go`（约 35 行）
 - Rust：实现 `tokio_util::codec::Decoder` trait（约 30 行）
 
 ---
