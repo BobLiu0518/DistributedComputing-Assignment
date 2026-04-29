@@ -103,6 +103,12 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 
 		reqLogger.Debug("handling request")
 		go func(req *pb.RpcRequest, h router.HandlerFunc) {
+			defer func() {
+				if r := recover(); r != nil {
+					reqLogger.Error("handler panic", "panic", r)
+				}
+			}()
+
 			respBytes, handlerErr := h(ctx, req.Payload)
 
 			resp := &pb.RpcResponse{RequestId: req.RequestId}

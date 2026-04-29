@@ -70,7 +70,11 @@ func (s *GachaService) Draw(ctx context.Context, req *pb.DrawRequest) (*pb.DrawR
 	cards := make([]*pb.Card, 0, count)
 	for i := int32(0); i < count; i++ {
 		card := drawOne()
-		s.db.ExecContext(ctx, "INSERT INTO cards (user_id, name, stars) VALUES ($1, $2, $3)", req.UserId, card.Name, card.Stars)
+		if _, err := s.db.ExecContext(ctx,
+			"INSERT INTO cards (user_id, name, stars) VALUES ($1, $2, $3)",
+			req.UserId, card.Name, card.Stars); err != nil {
+			slog.Error("insert card failed", "user_id", req.UserId, "card", card.Name, "error", err)
+		}
 		cards = append(cards, card)
 	}
 	slog.Info("draw completed", "user_id", req.UserId, "count", count, "instance", s.instance)

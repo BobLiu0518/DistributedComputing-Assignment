@@ -27,7 +27,7 @@ func (s *UserService) Register(ctx context.Context, req *pb.RegisterRequest) (*p
 		req.Name, hash).Scan(&id)
 	if err != nil {
 		slog.Error("register failed", "name", req.Name, "error", err)
-		return &pb.RegisterResponse{Message: "注册失败: 用户名已被占用"}, nil
+		return &pb.RegisterResponse{Message: "注册失败: " + err.Error()}, nil
 	}
 	slog.Info("user registered", "name", req.Name, "user_id", id)
 	return &pb.RegisterResponse{
@@ -43,8 +43,8 @@ func (s *UserService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Logi
 		"SELECT id FROM users WHERE name = $1 AND password_hash = $2",
 		req.Name, hash).Scan(&id)
 	if err != nil {
-		slog.Info("login failed", "name", req.Name)
-		return &pb.LoginResponse{Message: "登录失败: 用户名或密码错误"}, nil
+		slog.Info("login failed", "name", req.Name, "error", err)
+		return &pb.LoginResponse{Message: "登录失败: " + err.Error()}, nil
 	}
 	slog.Info("user logged in", "name", req.Name, "user_id", id)
 	return &pb.LoginResponse{
