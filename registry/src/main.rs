@@ -3,14 +3,26 @@ mod network;
 mod proto;
 mod registry;
 
+use chrono::Local;
 use config::Config;
 use registry::health::HealthChecker;
 use registry::notifier::Notifier;
 use registry::store::ServiceStore;
+use std::io::Write;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "{} [{}] {}",
+                Local::now().format("%Y/%m/%d %H:%M:%S"),
+                record.level(),
+                record.args()
+            )
+        })
+        .init();
 
     let config = Config::load();
     log::info!(

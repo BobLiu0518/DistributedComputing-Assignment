@@ -10,8 +10,13 @@ import tech.bobliu.rpc.scanner.ClassScanner
 import java.lang.reflect.Proxy
 import java.util.concurrent.ConcurrentHashMap
 
-class RpcFramework(config: RpcConfig, basePackage: String = "") {
-    private val registryClient = RegistryClient(config.registryHost, config.registryPort)
+class RpcFramework(
+    registryHost: String,
+    registryPort: Int,
+    debug: Boolean,
+    basePackage: String = "",
+) {
+    private val registryClient = RegistryClient(registryHost, registryPort, debug)
     private val rpcClient = RpcClient()
     private val proxies = ConcurrentHashMap<Class<*>, Any>()
 
@@ -68,9 +73,13 @@ class RpcFramework(config: RpcConfig, basePackage: String = "") {
             val appAnno = appClass.getAnnotation(RpcApp::class.java)
 
             val basePackage = appAnno.basePackage.ifEmpty { appClass.packageName }
-            val config = RpcConfig(appAnno.registryHost, appAnno.registryPort)
 
-            val fw = RpcFramework(config, basePackage)
+            val fw = RpcFramework(
+                appAnno.registryHost,
+                appAnno.registryPort,
+                appAnno.debug,
+                basePackage,
+            )
             try {
                 val app = appClass.getDeclaredConstructor().newInstance()
                 fw.inject(app)

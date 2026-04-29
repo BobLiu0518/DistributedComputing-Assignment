@@ -6,4 +6,5 @@ annotation class RpcApp(
     val basePackage: String = "",
     val registryHost: String = "localhost",
     val registryPort: Int = 9000,
+    val debug: Boolean = false,
 )

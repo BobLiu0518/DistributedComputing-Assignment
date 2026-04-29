@@ -5,7 +5,7 @@ import tech.bobliu.rpc.annotation.RpcInject;
 import tech.bobliu.rpc.proto.example.GetUserRequest;
 import tech.bobliu.rpc.proto.example.GetUserResponse;
 
-@RpcApp(basePackage = "tech.bobliu.rpc.app")
+@RpcApp(basePackage = "tech.bobliu.rpc.app", registryHost = "usst2.bobliu.tech")
 public class RpcClientDemo {
     @RpcInject
     private UserService userService;

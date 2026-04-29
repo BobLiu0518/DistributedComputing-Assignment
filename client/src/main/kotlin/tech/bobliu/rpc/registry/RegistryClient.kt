@@ -21,6 +21,7 @@ import kotlin.math.min
 class RegistryClient(
     private val registryHost: String,
     private val registryPort: Int,
+    private val debug: Boolean = false,
 ) {
     private val group = NioEventLoopGroup(1)
     @Volatile private var channel: Channel? = null
@@ -29,13 +30,19 @@ class RegistryClient(
     private var connected = CountDownLatch(1)
     @Volatile private var shutdown = false
 
+    private fun log(msg: String) {
+        if (debug) System.err.println(msg)
+    }
+
     fun connect() {
         var delay = 1000L
         val maxDelay = 30000L
+        log("[registry] connect() starting, target=$registryHost:$registryPort")
 
         while (!shutdown) {
             try {
                 doConnect()
+                log("[registry] connect() success")
                 return
             } catch (e: Exception) {
                 if (delay >= maxDelay || shutdown) {
@@ -43,7 +50,7 @@ class RegistryClient(
                         "Failed to connect to registry after retries: ${e.message}", e
                     )
                 }
-                System.err.println(
+                log(
                     "[registry] connect failed, retrying in ${delay}ms: ${e.message}"
                 )
                 Thread.sleep(delay)
@@ -54,6 +61,7 @@ class RegistryClient(
 
     private fun doConnect() {
         connected = CountDownLatch(1)
+        log("[registry] doConnect() attempting connection...")
 
         val bootstrap = Bootstrap()
             .group(group)
@@ -82,10 +90,12 @@ class RegistryClient(
 
         if (!connected.await(5, TimeUnit.SECONDS)) {
             channel?.close()
+            log("[registry] timeout waiting for ServiceList")
             throw RuntimeException(
                 "Failed to receive service list from registry within 5 seconds"
             )
         }
+        log("[registry] received ServiceList, connected=true")
     }
 
     fun getInstances(serviceName: String): List<ServiceInfo> =
@@ -111,11 +121,11 @@ class RegistryClient(
             while (!shutdown && !reconnected) {
                 try {
                     doConnect()
-                    System.err.println("[registry] reconnected successfully")
+                    log("[registry] reconnected successfully")
                     reconnected = true
                 } catch (e: Exception) {
                     if (shutdown) break
-                    System.err.println(
+                    log(
                         "[registry] reconnect failed, retrying in ${delay}ms: ${e.message}"
                     )
                     try {
@@ -161,7 +171,7 @@ class RegistryClient(
         }
 
         override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
-            System.err.println("[registry] exception: ${cause.message}")
+            log("[registry] exception: ${cause.message}")
             ctx.close()
         }
     }
