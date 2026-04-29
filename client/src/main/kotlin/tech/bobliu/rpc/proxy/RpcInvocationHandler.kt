@@ -4,6 +4,7 @@ import com.google.protobuf.MessageLite
 import tech.bobliu.rpc.annotation.RpcMethod
 import tech.bobliu.rpc.balance.LoadBalancer
 import tech.bobliu.rpc.exception.RpcException
+import tech.bobliu.rpc.exception.ServerException
 import tech.bobliu.rpc.fault.FaultTolerance
 import tech.bobliu.rpc.network.RpcClient
 import tech.bobliu.rpc.proto.RpcRequest
@@ -61,7 +62,7 @@ class RpcInvocationHandler(
             val response = rpcClient.call(request, instance.ip, instance.port)
 
             if (response.hasError()) {
-                throw RpcException(response.error.code, response.error.message)
+                throw ServerException(response.error.code, response.error.message)
             }
 
             val responseClass = rpcMethod.responseType.java

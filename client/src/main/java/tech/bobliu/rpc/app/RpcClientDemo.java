@@ -1,5 +1,6 @@
 package tech.bobliu.rpc.app;
 
+import tech.bobliu.rpc.exception.ServerException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Scanner;
@@ -15,7 +16,7 @@ import tech.bobliu.rpc.proto.app.LogoutRequest;
 import tech.bobliu.rpc.proto.app.RegisterRequest;
 import tech.bobliu.rpc.proto.app.RegisterResponse;
 
-@RpcApp(basePackage = "tech.bobliu.rpc.app", registryHost = "localhost", debug = true)
+@RpcApp(basePackage = "tech.bobliu.rpc.app", registryHost = "usst2.bobliu.tech", debug = true)
 public class RpcClientDemo {
     @RpcInject
     private UserServiceRpc userService;
@@ -57,10 +58,12 @@ public class RpcClientDemo {
                     }
                     default -> System.out.println("未知命令: " + cmd);
                 }
+            } catch (ServerException e) {
+                System.out.println("  错误: " + e.getMessage());
             } catch (Exception e) {
                 StringWriter sw = new StringWriter();
                 e.printStackTrace(new PrintWriter(sw));
-                System.out.println("错误: " + e + "\n" + sw);
+                System.out.println("  RPC 错误: " + e + "\n" + sw);
             }
         }
     }
@@ -87,7 +90,7 @@ public class RpcClientDemo {
         if (currentUserId == 0) { System.out.println("  请先登录!"); return; }
         int count = 1;
         if (parts.length >= 2) {
-            try { count = Integer.parseInt(parts[1]); } catch (NumberFormatException e) {}
+            try { count = (int) Float.parseFloat(parts[1]); } catch (NumberFormatException e) {}
         }
 
         DrawResponse resp = gachaService.draw(

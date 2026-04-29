@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
 class RpcFramework(
     registryHost: String,
     registryPort: Int,
-    debug: Boolean,
+    private val debug: Boolean,
     basePackage: String = "",
 ) {
     private val registryClient = RegistryClient(registryHost, registryPort, debug)

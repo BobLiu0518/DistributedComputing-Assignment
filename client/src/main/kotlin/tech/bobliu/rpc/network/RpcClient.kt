@@ -60,12 +60,10 @@ class RpcClient {
             try {
                 val connectFuture = bootstrap.connect(host, port).await()
                 if (!connectFuture.isSuccess) {
-                    channels.remove(key)
                     throw RuntimeException("Failed to connect to $host:$port", connectFuture.cause())
                 }
                 ChannelContext(connectFuture.channel(), pending)
             } catch (e: Exception) {
-                channels.remove(key)
                 throw RuntimeException("Failed to connect to $host:$port: ${e.message}", e)
             }
         }
