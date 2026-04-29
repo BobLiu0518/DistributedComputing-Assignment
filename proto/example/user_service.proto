@@ -13,3 +13,7 @@ message GetUserResponse {
   string name = 2;
   int32 age = 3;
 }
+
+service UserService {
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}

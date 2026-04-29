@@ -1,4 +1,5 @@
 //go:generate go run ./../genproto/
+//go:generate go run ./../genrpc/
 
 package main
 
@@ -13,6 +14,7 @@ import (
 	"rpc-server/internal/config"
 	"rpc-server/internal/registry"
 	"rpc-server/internal/router"
+	"rpc-server/internal/rpc"
 	"rpc-server/internal/server"
 )
 
@@ -23,7 +25,7 @@ func main() {
 	cfg := config.Load()
 
 	r := router.New()
-	r.Register(cfg.ServiceName, "getUser", example.GetUserHandler)
+	rpc.RegisterUserService(r, &example.UserService{})
 
 	regClient := registry.NewClient(
 		cfg.RegistryAddr,

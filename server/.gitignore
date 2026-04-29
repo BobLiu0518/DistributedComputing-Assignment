@@ -1,5 +1,6 @@
-# Generated proto code
+# Generated code
 pb/
+internal/rpc/
 
 # Build output
 bin/

@@ -4,22 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/protobuf/proto"
-
 	pb "rpc-server/pb/example"
+	"rpc-server/internal/rpc"
 )
 
-func GetUserHandler(ctx context.Context, payload []byte) ([]byte, error) {
-	req := &pb.GetUserRequest{}
-	if err := proto.Unmarshal(payload, req); err != nil {
-		return nil, fmt.Errorf("unmarshal GetUserRequest: %w", err)
-	}
+type UserService struct{}
 
-	resp := &pb.GetUserResponse{
+func (s *UserService) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
+	return &pb.GetUserResponse{
 		Id:   req.Id,
 		Name: fmt.Sprintf("user-%d", req.Id),
 		Age:  25,
-	}
-
-	return proto.Marshal(resp)
+	}, nil
 }
+
+var _ rpc.UserServiceHandler = (*UserService)(nil)
