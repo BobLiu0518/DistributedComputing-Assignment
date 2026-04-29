@@ -103,6 +103,9 @@ func (c *Client) Deregister() {
 }
 
 func (c *Client) Run(ctx context.Context) {
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,8 +134,11 @@ func (c *Client) Run(ctx context.Context) {
 		case <-c.stopCh:
 			return
 		default:
-			log.Printf("[registry] connection lost, attempting reconnect...")
-			time.Sleep(time.Second)
+			log.Printf("[registry] connection lost, reconnect in %v...", backoff)
+			time.Sleep(backoff)
+			if backoff < maxBackoff {
+				backoff *= 2
+			}
 		}
 	}
 }
@@ -146,7 +152,7 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	failCount := 0
-	const maxFailBeforeReconnect = 3
+	const maxFailBeforeReconnect = 2
 
 	for {
 		select {

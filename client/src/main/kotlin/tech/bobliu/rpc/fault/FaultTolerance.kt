@@ -13,37 +13,27 @@ class FaultTolerance(
 ) {
     fun <T> execute(action: () -> T): T {
         var delay = baseDelayMs
-        var lastException: Exception? = null
 
         for (attempt in 0..maxRetries) {
             try {
                 return action()
-            } catch (e: RpcException) {
-                lastException = e
-                if (attempt < maxRetries && isRetryable(e)) {
-                    Thread.sleep(delay)
-                    delay = min(delay * 2, maxDelayMs)
-                } else {
+            } catch (e: Throwable) {
+                if (attempt == maxRetries || !isRetryable(e)) {
                     throw e
                 }
-            } catch (e: Exception) {
-                lastException = e
-                if (attempt < maxRetries && isRetryable(e)) {
-                    Thread.sleep(delay)
-                    delay = min(delay * 2, maxDelayMs)
-                } else {
-                    throw e
-                }
+                Thread.sleep(delay)
+                delay = min(delay * 2, maxDelayMs)
             }
         }
 
-        throw RpcException(-1, "RPC failed after $maxRetries retries", lastException)
+        throw RpcException(-1, "RPC failed after $maxRetries retries")
     }
 
     private fun isRetryable(e: Throwable): Boolean {
-        return e is IOException ||
-               e is SocketException ||
-               e is TimeoutException ||
-               (e is RpcException && isRetryable(e.cause ?: return false))
+        return when (e) {
+            is IOException, is SocketException, is TimeoutException -> true
+            is RpcException -> isRetryable(e.cause ?: return false)
+            else -> false
+        }
     }
 }

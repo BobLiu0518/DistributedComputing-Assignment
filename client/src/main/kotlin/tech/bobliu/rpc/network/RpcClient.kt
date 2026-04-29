@@ -26,15 +26,14 @@ class RpcClient {
         val future = CompletableFuture<RpcResponse>()
         channelCtx.pending[request.requestId] = future
 
+        future.orTimeout(10, TimeUnit.SECONDS)
+            .whenComplete { _, _ -> channelCtx.pending.remove(request.requestId) }
+
         try {
             val bytes = request.toByteArray()
             channelCtx.channel.writeAndFlush(Unpooled.wrappedBuffer(bytes)).sync()
-            return future.get(10, TimeUnit.SECONDS)
+            return future.get()
         } catch (e: Exception) {
-            channelCtx.pending.remove(request.requestId)
-            if (e is java.util.concurrent.TimeoutException) {
-                throw RpcException(-1, "RPC call timeout for ${request.service}.${request.method}")
-            }
             throw RpcException(-1, "RPC call failed: ${e.message}", e)
         }
     }

@@ -26,7 +26,7 @@ class RegistryClient(
     @Volatile private var channel: Channel? = null
     private val serviceCache = ConcurrentHashMap<String, List<ServiceInfo>>()
     private val listeners = CopyOnWriteArrayList<(String, List<ServiceInfo>) -> Unit>()
-    @Volatile private var connected = CountDownLatch(1)
+    private var connected = CountDownLatch(1)
     @Volatile private var shutdown = false
 
     fun connect() {
