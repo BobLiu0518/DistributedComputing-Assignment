@@ -56,7 +56,8 @@ public class RpcClientDemo {
                     default -> System.out.println("未知命令: " + cmd);
                 }
             } catch (Exception e) {
-                System.out.println("错误: " + e.getMessage());
+                System.out.println("错误: " + e);
+                e.printStackTrace();
             }
         }
     }

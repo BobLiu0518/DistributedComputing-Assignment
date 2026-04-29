@@ -78,15 +78,21 @@ class RegistryClient(
                 }
             })
 
-        val future = bootstrap.connect(registryHost, registryPort).sync()
-        channel = future.channel()
+        val connectFuture = bootstrap.connect(registryHost, registryPort).await()
+        if (!connectFuture.isSuccess) {
+            throw RuntimeException("Failed to connect to registry", connectFuture.cause())
+        }
+        channel = connectFuture.channel()
 
         val subscribeMsg = RegistryMessage.newBuilder()
             .setSubscribe(SubscribeRequest.getDefaultInstance())
             .build()
-        future.channel()
+        val writeFuture = connectFuture.channel()
             .writeAndFlush(Unpooled.wrappedBuffer(subscribeMsg.toByteArray()))
-            .sync()
+            .await()
+        if (!writeFuture.isSuccess) {
+            throw RuntimeException("Failed to send subscribe", writeFuture.cause())
+        }
 
         if (!connected.await(5, TimeUnit.SECONDS)) {
             channel?.close()

@@ -29,11 +29,11 @@ class RpcClient {
         future.orTimeout(10, TimeUnit.SECONDS)
             .whenComplete { _, _ -> channelCtx.pending.remove(request.requestId) }
 
-        try {
-            val bytes = request.toByteArray()
-            channelCtx.channel.writeAndFlush(Unpooled.wrappedBuffer(bytes)).sync()
-            return future.get()
-        } catch (e: Exception) {
+    try {
+        val bytes = request.toByteArray()
+        channelCtx.channel.writeAndFlush(Unpooled.wrappedBuffer(bytes))
+        return future.get()
+    } catch (e: Exception) {
             throw RpcException(-1, "RPC call failed: ${e.message}", e)
         }
     }
@@ -58,8 +58,12 @@ class RpcClient {
                     }
                 })
             try {
-                val channel = bootstrap.connect(host, port).sync().channel()
-                ChannelContext(channel, pending)
+                val connectFuture = bootstrap.connect(host, port).await()
+                if (!connectFuture.isSuccess) {
+                    channels.remove(key)
+                    throw RuntimeException("Failed to connect to $host:$port", connectFuture.cause())
+                }
+                ChannelContext(connectFuture.channel(), pending)
             } catch (e: Exception) {
                 channels.remove(key)
                 throw RuntimeException("Failed to connect to $host:$port: ${e.message}", e)
