@@ -2,6 +2,9 @@
 pb/
 internal/rpc/
 
+# Database
+data/
+
 # Build output
 bin/
 

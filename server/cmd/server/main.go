@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"rpc-server/app"
@@ -31,7 +32,8 @@ func main() {
 		Level: slog.LevelInfo,
 	})).With("service", cfg.ServiceName))
 
-	database, err := db.Open(cfg.ServiceName + ".db")
+	os.MkdirAll("data", 0755)
+	database, err := db.Open(filepath.Join("data", cfg.ServiceName+".db"))
 	if err != nil {
 		slog.Error("open database", "error", err)
 		os.Exit(1)
