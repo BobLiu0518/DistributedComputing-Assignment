@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -60,11 +61,8 @@ func (s *GachaService) SetInstance(port string) {
 
 func (s *GachaService) Draw(ctx context.Context, req *pb.DrawRequest) (*pb.DrawResponse, error) {
 	count := req.Count
-	if count < 1 {
-		count = 1
-	}
-	if count > 10 {
-		count = 10
+	if count < 1 || count > 10 {
+		return nil, fmt.Errorf("抽卡数量需在 1-10 之间，收到 %d", count)
 	}
 
 	cards := make([]*pb.Card, 0, count)

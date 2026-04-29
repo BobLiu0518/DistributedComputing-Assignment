@@ -17,6 +17,7 @@ class RpcInvocationHandler(
     private val registryClient: RegistryClient,
     private val rpcClient: RpcClient,
     private val faultTolerance: FaultTolerance = FaultTolerance(),
+    private val debug: Boolean = false,
 ) : InvocationHandler {
 
     override fun invoke(proxy: Any, method: Method, args: Array<out Any>?): Any? {
@@ -48,6 +49,7 @@ class RpcInvocationHandler(
             }
 
             val instance = LoadBalancer.select(instances)
+            if (debug) System.err.printf("[rpc] %s.%s → %s:%d%n", serviceName, method.name, instance.ip, instance.port)
 
             val request = RpcRequest.newBuilder()
                 .setRequestId(UUID.randomUUID().toString())
