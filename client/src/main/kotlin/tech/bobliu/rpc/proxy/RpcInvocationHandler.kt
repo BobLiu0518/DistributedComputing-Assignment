@@ -21,7 +21,12 @@ class RpcInvocationHandler(
 
     override fun invoke(proxy: Any, method: Method, args: Array<out Any>?): Any? {
         if (method.declaringClass == Any::class.java) {
-            return method.invoke(proxy, *(args ?: emptyArray()))
+            return when (method.name) {
+                "toString" -> "${proxy.javaClass.name}@${Integer.toHexString(System.identityHashCode(proxy))}"
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals"   -> args?.getOrNull(0) === proxy
+                else       -> throw UnsupportedOperationException("Unsupported Object method: ${method.name}")
+            }
         }
 
         val rpcMethod = method.getAnnotation(RpcMethod::class.java)

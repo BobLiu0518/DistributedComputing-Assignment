@@ -126,3 +126,36 @@ func (c *Client) HeartbeatLoop(ctx context.Context) {
 		}
 	}
 }
+
+func (c *Client) ReadLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		data, err := codec.ReadFrame(c.conn)
+		if err != nil {
+			log.Printf("[registry] read loop: connection error: %v", err)
+			return
+		}
+
+		resp := &pb.RegistryMessage{}
+		if err := proto.Unmarshal(data, resp); err != nil {
+			log.Printf("[registry] read loop: unmarshal error: %v", err)
+			continue
+		}
+
+		r, ok := resp.Payload.(*pb.RegistryMessage_Response)
+		if ok && r != nil {
+			log.Printf("[registry] received: success=%v, message=%s",
+				r.Response.Success, r.Response.Message)
+			if !r.Response.Success {
+				log.Printf("[registry] registry rejected us, closing connection")
+				c.conn.Close()
+				return
+			}
+		}
+	}
+}

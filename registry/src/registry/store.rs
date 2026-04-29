@@ -86,6 +86,25 @@ impl ServiceStore {
         false
     }
 
+    pub async fn deregister(&self, ip: &str, port: i32) -> bool {
+        let mut guard = self.inner.write().await;
+        let mut idx = self.index.write().await;
+        let key = (ip.to_string(), port);
+
+        let Some(service_name) = idx.remove(&key) else {
+            return false;
+        };
+
+        if let Some(instances) = guard.get_mut(&service_name) {
+            instances.retain(|i| i.ip != ip || i.port != port);
+            if instances.is_empty() {
+                guard.remove(&service_name);
+            }
+        }
+
+        true
+    }
+
     pub async fn remove_expired(&self, timeout_secs: u64) -> Vec<(String, String, i32)> {
         let mut guard = self.inner.write().await;
         let mut idx = self.index.write().await;

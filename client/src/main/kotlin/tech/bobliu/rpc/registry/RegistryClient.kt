@@ -16,18 +16,44 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
 
 class RegistryClient(
     private val registryHost: String,
     private val registryPort: Int,
 ) {
     private val group = NioEventLoopGroup(1)
-    private var channel: Channel? = null
+    @Volatile private var channel: Channel? = null
     private val serviceCache = ConcurrentHashMap<String, List<ServiceInfo>>()
     private val listeners = CopyOnWriteArrayList<(String, List<ServiceInfo>) -> Unit>()
+    @Volatile private var connected = CountDownLatch(1)
+    @Volatile private var shutdown = false
 
     fun connect() {
-        val latch = CountDownLatch(1)
+        var delay = 1000L
+        val maxDelay = 30000L
+
+        while (!shutdown) {
+            try {
+                doConnect()
+                return
+            } catch (e: Exception) {
+                if (delay >= maxDelay || shutdown) {
+                    throw RuntimeException(
+                        "Failed to connect to registry after retries: ${e.message}", e
+                    )
+                }
+                System.err.println(
+                    "[registry] connect failed, retrying in ${delay}ms: ${e.message}"
+                )
+                Thread.sleep(delay)
+                delay = min(delay * 2, maxDelay)
+            }
+        }
+    }
+
+    private fun doConnect() {
+        connected = CountDownLatch(1)
 
         val bootstrap = Bootstrap()
             .group(group)
@@ -39,7 +65,7 @@ class RegistryClient(
                     ch.pipeline().addLast(
                         LengthFieldBasedFrameDecoder(16 * 1024 * 1024, 0, 4, 0, 4),
                         LengthFieldPrepender(4),
-                        RegistryHandler(latch),
+                        RegistryHandler(),
                     )
                 }
             })
@@ -50,11 +76,11 @@ class RegistryClient(
         val subscribeMsg = RegistryMessage.newBuilder()
             .setSubscribe(SubscribeRequest.getDefaultInstance())
             .build()
-        val bytes = subscribeMsg.toByteArray()
-        future.channel().writeAndFlush(Unpooled.wrappedBuffer(bytes)).sync()
+        future.channel()
+            .writeAndFlush(Unpooled.wrappedBuffer(subscribeMsg.toByteArray()))
+            .sync()
 
-        val received = latch.await(5, TimeUnit.SECONDS)
-        if (!received) {
+        if (!connected.await(5, TimeUnit.SECONDS)) {
             channel?.close()
             throw RuntimeException(
                 "Failed to receive service list from registry within 5 seconds"
@@ -71,13 +97,39 @@ class RegistryClient(
     }
 
     fun shutdown() {
+        shutdown = true
         channel?.close()
         group.shutdownGracefully()
     }
 
-    private inner class RegistryHandler(
-        private val initLatch: CountDownLatch,
-    ) : ChannelInboundHandlerAdapter() {
+    private fun scheduleReconnect() {
+        Thread {
+            var delay = 1000L
+            val maxDelay = 30000L
+            var reconnected = false
+
+            while (!shutdown && !reconnected) {
+                try {
+                    doConnect()
+                    System.err.println("[registry] reconnected successfully")
+                    reconnected = true
+                } catch (e: Exception) {
+                    if (shutdown) break
+                    System.err.println(
+                        "[registry] reconnect failed, retrying in ${delay}ms: ${e.message}"
+                    )
+                    try {
+                        Thread.sleep(delay)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                    delay = min(delay * 2, maxDelay)
+                }
+            }
+        }.start()
+    }
+
+    private inner class RegistryHandler : ChannelInboundHandlerAdapter() {
         override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
             val buf = msg as ByteBuf
             val bytes = ByteArray(buf.readableBytes())
@@ -92,16 +144,24 @@ class RegistryClient(
                     serviceCache[name] = instances
                     listeners.forEach { it(name, instances) }
                 }
-                initLatch.countDown()
+                connected.countDown()
             }
         }
 
         override fun channelInactive(ctx: ChannelHandlerContext) {
+            val serviceNames = serviceCache.keys().toList()
             serviceCache.clear()
+            for (name in serviceNames) {
+                for (listener in listeners) {
+                    listener(name, emptyList())
+                }
+            }
+            scheduleReconnect()
             super.channelInactive(ctx)
         }
 
         override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
+            System.err.println("[registry] exception: ${cause.message}")
             ctx.close()
         }
     }

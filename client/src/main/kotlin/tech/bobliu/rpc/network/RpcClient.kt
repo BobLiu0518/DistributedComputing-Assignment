@@ -18,20 +18,19 @@ import java.util.concurrent.TimeUnit
 
 class RpcClient {
     private val group = NioEventLoopGroup()
-    private val channels = ConcurrentHashMap<String, Channel>()
-    private val pendingRequests = ConcurrentHashMap<String, CompletableFuture<RpcResponse>>()
+    private val channels = ConcurrentHashMap<String, ChannelContext>()
 
     fun call(request: RpcRequest, host: String, port: Int): RpcResponse {
-        val channel = getOrCreateChannel(host, port)
+        val channelCtx = getOrCreateChannel(host, port)
         val future = CompletableFuture<RpcResponse>()
-        pendingRequests[request.requestId] = future
+        channelCtx.pending[request.requestId] = future
 
         try {
             val bytes = request.toByteArray()
-            channel.writeAndFlush(Unpooled.wrappedBuffer(bytes)).sync()
+            channelCtx.channel.writeAndFlush(Unpooled.wrappedBuffer(bytes)).sync()
             return future.get(10, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            pendingRequests.remove(request.requestId)
+            channelCtx.pending.remove(request.requestId)
             if (e is java.util.concurrent.TimeoutException) {
                 throw RuntimeException(
                     "RPC call timeout for ${request.service}.${request.method}"
@@ -41,9 +40,10 @@ class RpcClient {
         }
     }
 
-    private fun getOrCreateChannel(host: String, port: Int): Channel {
+    private fun getOrCreateChannel(host: String, port: Int): ChannelContext {
         val key = "$host:$port"
         return channels.computeIfAbsent(key) { _ ->
+            val pending = ConcurrentHashMap<String, CompletableFuture<RpcResponse>>()
             val bootstrap = Bootstrap()
                 .group(group)
                 .channel(NioSocketChannel::class.java)
@@ -55,12 +55,13 @@ class RpcClient {
                             IdleStateHandler(0, 0, 60),
                             LengthFieldBasedFrameDecoder(16 * 1024 * 1024, 0, 4, 0, 4),
                             LengthFieldPrepender(4),
-                            ResponseHandler(pendingRequests, key, channels),
+                            ResponseHandler(pending, key, channels),
                         )
                     }
                 })
             try {
-                bootstrap.connect(host, port).sync().channel()
+                val channel = bootstrap.connect(host, port).sync().channel()
+                ChannelContext(channel, pending)
             } catch (e: Exception) {
                 channels.remove(key)
                 throw RuntimeException("Failed to connect to $host:$port: ${e.message}", e)
@@ -69,15 +70,20 @@ class RpcClient {
     }
 
     fun shutdown() {
-        channels.values.forEach { it.close() }
+        channels.values.forEach { it.channel.close() }
         channels.clear()
         group.shutdownGracefully()
     }
 
+    private class ChannelContext(
+        val channel: Channel,
+        val pending: ConcurrentHashMap<String, CompletableFuture<RpcResponse>>,
+    )
+
     private class ResponseHandler(
         private val pending: ConcurrentHashMap<String, CompletableFuture<RpcResponse>>,
         private val channelKey: String,
-        private val channels: ConcurrentHashMap<String, Channel>,
+        private val channels: ConcurrentHashMap<String, ChannelContext>,
     ) : ChannelInboundHandlerAdapter() {
         override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
             val buf = msg as ByteBuf

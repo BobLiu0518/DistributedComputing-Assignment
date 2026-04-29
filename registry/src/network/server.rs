@@ -58,6 +58,7 @@ async fn handle_connection(
 ) -> anyhow::Result<()> {
     let mut framed = Framed::new(socket, RegistryCodec::new());
     let mut is_client = false;
+    let mut registered_instances: Vec<(String, i32)> = Vec::new();
 
     loop {
         if is_client {
@@ -119,6 +120,9 @@ async fn handle_connection(
                                     req.port,
                                     changed,
                                 );
+
+                                registered_instances
+                                    .push((req.ip.clone(), req.port));
 
                                 let response = RegistryMessage {
                                     payload: Some(registry_message::Payload::Response(
@@ -185,6 +189,18 @@ async fn handle_connection(
                 None => break,
             }
         }
+    }
+
+    let mut changed = false;
+    for (ip, port) in &registered_instances {
+        if store.deregister(ip, *port).await {
+            log::info!("Deregistered {}:{} on connection close", ip, port);
+            changed = true;
+        }
+    }
+    if changed {
+        let service_list = store.build_service_list().await;
+        let _ = notifier_tx.send(service_list);
     }
 
     Ok(())

@@ -2,8 +2,11 @@ package codec
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 )
+
+var ErrFrameTooLarge = errors.New("frame size exceeds maximum allowed (16MB)")
 
 func ReadFrame(r io.Reader) ([]byte, error) {
 	var header [4]byte
@@ -12,7 +15,7 @@ func ReadFrame(r io.Reader) ([]byte, error) {
 	}
 	length := binary.BigEndian.Uint32(header[:])
 	if length > 16*1024*1024 {
-		return nil, io.ErrUnexpectedEOF
+		return nil, ErrFrameTooLarge
 	}
 	data := make([]byte, length)
 	if _, err := io.ReadFull(r, data); err != nil {
