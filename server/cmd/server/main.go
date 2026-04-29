@@ -15,6 +15,7 @@ import (
 	"rpc-server/app"
 	"rpc-server/internal/config"
 	"rpc-server/internal/db"
+	"rpc-server/internal/log"
 	"rpc-server/internal/registry"
 	"rpc-server/internal/router"
 	"rpc-server/internal/rpc"
@@ -27,9 +28,7 @@ func main() {
 
 	cfg := config.Load()
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})).With("service", cfg.ServiceName))
+	slog.SetDefault(slog.New(log.NewCompactHandler(os.Stdout)).With("svc", cfg.ServiceName))
 
 	database, err := db.Open(cfg.DatabaseURL)
 	if err != nil {

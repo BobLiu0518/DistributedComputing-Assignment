@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"log/slog"
 	"math/rand"
 	"os"
 
@@ -69,10 +70,10 @@ func (s *GachaService) Draw(ctx context.Context, req *pb.DrawRequest) (*pb.DrawR
 	cards := make([]*pb.Card, 0, count)
 	for i := int32(0); i < count; i++ {
 		card := drawOne()
-		s.db.ExecContext(ctx, "INSERT INTO cards (user_id, name, stars) VALUES (?, ?, ?)", req.UserId, card.Name, card.Stars)
+		s.db.ExecContext(ctx, "INSERT INTO cards (user_id, name, stars) VALUES ($1, $2, $3)", req.UserId, card.Name, card.Stars)
 		cards = append(cards, card)
 	}
-
+	slog.Info("draw completed", "user_id", req.UserId, "count", count, "instance", s.instance)
 	return &pb.DrawResponse{Cards: cards, Instance: s.instance}, nil
 }
 
