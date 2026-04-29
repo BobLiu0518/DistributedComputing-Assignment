@@ -11,30 +11,18 @@ public interface RegisterRequestOrBuilder extends
     com.google.protobuf.MessageOrBuilder {
 
   /**
-   * <code>string ip = 1;</code>
-   * @return The ip.
-   */
-  java.lang.String getIp();
-  /**
-   * <code>string ip = 1;</code>
-   * @return The bytes for ip.
-   */
-  com.google.protobuf.ByteString
-      getIpBytes();
-
-  /**
-   * <code>int32 port = 2;</code>
+   * <code>int32 port = 1;</code>
    * @return The port.
    */
   int getPort();
 
   /**
-   * <code>string service = 3;</code>
+   * <code>string service = 2;</code>
    * @return The service.
    */
   java.lang.String getService();
   /**
-   * <code>string service = 3;</code>
+   * <code>string service = 2;</code>
    * @return The bytes for service.
    */
   com.google.protobuf.ByteString

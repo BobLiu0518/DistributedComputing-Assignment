@@ -16,7 +16,6 @@ import (
 
 type Client struct {
 	registryAddr      string
-	selfIP            string
 	selfPort          int
 	serviceName       string
 	heartbeatInterval time.Duration
@@ -27,10 +26,9 @@ type Client struct {
 	stopOnce sync.Once
 }
 
-func NewClient(registryAddr, selfIP string, selfPort int, serviceName string) *Client {
+func NewClient(registryAddr string, selfPort int, serviceName string) *Client {
 	return &Client{
 		registryAddr:      registryAddr,
-		selfIP:            selfIP,
 		selfPort:          selfPort,
 		serviceName:       serviceName,
 		heartbeatInterval: 10 * time.Second,
@@ -51,7 +49,6 @@ func (c *Client) Register(ctx context.Context) error {
 	msg := &pb.RegistryMessage{
 		Payload: &pb.RegistryMessage_Register{
 			Register: &pb.RegisterRequest{
-				Ip:      c.selfIP,
 				Port:    int32(c.selfPort),
 				Service: c.serviceName,
 			},
@@ -164,7 +161,6 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 			msg := &pb.RegistryMessage{
 				Payload: &pb.RegistryMessage_Heartbeat{
 					Heartbeat: &pb.HeartbeatRequest{
-						Ip:   c.selfIP,
 						Port: int32(c.selfPort),
 					},
 				},

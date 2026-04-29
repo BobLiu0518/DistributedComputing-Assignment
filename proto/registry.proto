@@ -5,14 +5,12 @@ option java_package = "tech.bobliu.rpc.proto";
 option java_multiple_files = true;
 
 message RegisterRequest {
-  string ip = 1;
-  int32 port = 2;
-  string service = 3;
+  int32 port = 1;
+  string service = 2;
 }
 
 message HeartbeatRequest {
-  string ip = 1;
-  int32 port = 2;
+  int32 port = 1;
 }
 
 message SubscribeRequest {}

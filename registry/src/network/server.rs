@@ -124,18 +124,19 @@ async fn handle_register(
     registered_instances: &mut Vec<(String, i32)>,
     req: crate::proto::RegisterRequest,
 ) -> anyhow::Result<()> {
+    let peer_ip = framed.get_ref().peer_addr()?.ip().to_string();
     let changed = store
-        .register(req.ip.clone(), req.port, req.service.clone())
+        .register(peer_ip.clone(), req.port, req.service.clone())
         .await;
     log::info!(
         "Registered service '{}' at {}:{} (changed={})",
         req.service,
-        req.ip,
+        peer_ip,
         req.port,
         changed,
     );
 
-    registered_instances.push((req.ip.clone(), req.port));
+    registered_instances.push((peer_ip.clone(), req.port));
 
     let response = RegistryMessage {
         payload: Some(registry_message::Payload::Response(RegistryResponse {
@@ -158,7 +159,8 @@ async fn handle_heartbeat(
     store: &ServiceStore,
     req: crate::proto::HeartbeatRequest,
 ) -> anyhow::Result<()> {
-    let found = store.heartbeat(&req.ip, req.port).await;
+    let peer_ip = framed.get_ref().peer_addr()?.ip().to_string();
+    let found = store.heartbeat(&peer_ip, req.port).await;
     let response = RegistryMessage {
         payload: Some(registry_message::Payload::Response(RegistryResponse {
             success: found,
@@ -176,7 +178,7 @@ async fn handle_heartbeat(
     if !found {
         log::warn!(
             "Heartbeat from unknown instance {}:{}",
-            req.ip,
+            peer_ip,
             req.port,
         );
     }

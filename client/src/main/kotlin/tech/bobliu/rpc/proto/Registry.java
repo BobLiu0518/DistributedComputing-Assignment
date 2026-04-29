@@ -80,26 +80,25 @@ public final class Registry extends com.google.protobuf.GeneratedFile {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\016registry.proto\022\010registry\"<\n\017RegisterRe" +
-      "quest\022\n\n\002ip\030\001 \001(\t\022\014\n\004port\030\002 \001(\005\022\017\n\007servi" +
-      "ce\030\003 \001(\t\",\n\020HeartbeatRequest\022\n\n\002ip\030\001 \001(\t" +
-      "\022\014\n\004port\030\002 \001(\005\"\022\n\020SubscribeRequest\"4\n\020Re" +
-      "gistryResponse\022\017\n\007success\030\001 \001(\010\022\017\n\007messa" +
-      "ge\030\002 \001(\t\"\'\n\013ServiceInfo\022\n\n\002ip\030\001 \001(\t\022\014\n\004p" +
-      "ort\030\002 \001(\005\"<\n\020ServiceListEntry\022(\n\tinstanc" +
-      "es\030\001 \003(\0132\025.registry.ServiceInfo\"\221\001\n\013Serv" +
-      "iceList\0225\n\010services\030\001 \003(\0132#.registry.Ser" +
-      "viceList.ServicesEntry\032K\n\rServicesEntry\022" +
-      "\013\n\003key\030\001 \001(\t\022)\n\005value\030\002 \001(\0132\032.registry.S" +
-      "erviceListEntry:\0028\001\"\214\002\n\017RegistryMessage\022" +
-      "-\n\010register\030\001 \001(\0132\031.registry.RegisterReq" +
-      "uestH\000\022/\n\theartbeat\030\002 \001(\0132\032.registry.Hea" +
-      "rtbeatRequestH\000\022/\n\tsubscribe\030\003 \001(\0132\032.reg" +
-      "istry.SubscribeRequestH\000\022.\n\010response\030\004 \001" +
-      "(\0132\032.registry.RegistryResponseH\000\022-\n\014serv" +
-      "ice_list\030\005 \001(\0132\025.registry.ServiceListH\000B" +
-      "\t\n\007payloadB(\n\025tech.bobliu.rpc.protoP\001Z\rr" +
-      "pc-server/pbb\006proto3"
+      "\n\016registry.proto\022\010registry\"0\n\017RegisterRe" +
+      "quest\022\014\n\004port\030\001 \001(\005\022\017\n\007service\030\002 \001(\t\" \n\020" +
+      "HeartbeatRequest\022\014\n\004port\030\001 \001(\005\"\022\n\020Subscr" +
+      "ibeRequest\"4\n\020RegistryResponse\022\017\n\007succes" +
+      "s\030\001 \001(\010\022\017\n\007message\030\002 \001(\t\"\'\n\013ServiceInfo\022" +
+      "\n\n\002ip\030\001 \001(\t\022\014\n\004port\030\002 \001(\005\"<\n\020ServiceList" +
+      "Entry\022(\n\tinstances\030\001 \003(\0132\025.registry.Serv" +
+      "iceInfo\"\221\001\n\013ServiceList\0225\n\010services\030\001 \003(" +
+      "\0132#.registry.ServiceList.ServicesEntry\032K" +
+      "\n\rServicesEntry\022\013\n\003key\030\001 \001(\t\022)\n\005value\030\002 " +
+      "\001(\0132\032.registry.ServiceListEntry:\0028\001\"\214\002\n\017" +
+      "RegistryMessage\022-\n\010register\030\001 \001(\0132\031.regi" +
+      "stry.RegisterRequestH\000\022/\n\theartbeat\030\002 \001(" +
+      "\0132\032.registry.HeartbeatRequestH\000\022/\n\tsubsc" +
+      "ribe\030\003 \001(\0132\032.registry.SubscribeRequestH\000" +
+      "\022.\n\010response\030\004 \001(\0132\032.registry.RegistryRe" +
+      "sponseH\000\022-\n\014service_list\030\005 \001(\0132\025.registr" +
+      "y.ServiceListH\000B\t\n\007payloadB(\n\025tech.bobli" +
+      "u.rpc.protoP\001Z\rrpc-server/pbb\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -110,13 +109,13 @@ public final class Registry extends com.google.protobuf.GeneratedFile {
     internal_static_registry_RegisterRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_registry_RegisterRequest_descriptor,
-        new java.lang.String[] { "Ip", "Port", "Service", });
+        new java.lang.String[] { "Port", "Service", });
     internal_static_registry_HeartbeatRequest_descriptor =
       getDescriptor().getMessageType(1);
     internal_static_registry_HeartbeatRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_registry_HeartbeatRequest_descriptor,
-        new java.lang.String[] { "Ip", "Port", });
+        new java.lang.String[] { "Port", });
     internal_static_registry_SubscribeRequest_descriptor =
       getDescriptor().getMessageType(2);
     internal_static_registry_SubscribeRequest_fieldAccessorTable = new

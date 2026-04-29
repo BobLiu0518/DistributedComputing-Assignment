@@ -32,7 +32,6 @@ func main() {
 
 	regClient := registry.NewClient(
 		getEnv("REGISTRY_ADDR", "localhost:9000"),
-		getEnv("SELF_IP", "127.0.0.1"),
 		selfPort,
 		serviceName,
 	)
