@@ -79,15 +79,48 @@ mvn exec:java
 
 ### 自定义配置
 
-```bash
-# 注册中心
-REGISTRY_ADDR=0.0.0.0:9999 cargo run
+**注册中心（Rust）**
 
-# 服务端
-RPC_PORT=9090 SERVICE_NAME=OrderService go run ./cmd/server/
+编辑 `registry/registry.toml`：
 
-# 调用端（修改 @RpcApp 注解中的 registryHost / registryPort 参数）
+```toml
+listen_addr = "0.0.0.0:9999"
+heartbeat_timeout_secs = 30
+health_check_interval_secs = 10
+broadcast_channel_capacity = 16
 ```
+
+或环境变量覆盖：
+
+```bash
+REGISTRY_ADDR=0.0.0.0:9999 cargo run
+```
+
+**服务端（Go）**
+
+编辑 `server/server.json`：
+
+```json
+{
+  "registry_addr": "localhost:9000",
+  "port": 8080,
+  "service_name": "UserService",
+  "heartbeat_interval_sec": 10,
+  "heartbeat_max_fail": 2,
+  "reconnect_backoff_sec": 1,
+  "reconnect_max_backoff_sec": 30
+}
+```
+
+或环境变量覆盖：
+
+```bash
+RPC_PORT=9090 SERVICE_NAME=OrderService go run ./cmd/server/
+```
+
+**调用端（Java）**
+
+修改 `@RpcApp` 注解中的 `registryHost` / `registryPort` 参数。
 
 ## 开发者视角
 

@@ -15,10 +15,13 @@ import (
 )
 
 type Client struct {
-	registryAddr      string
-	selfPort          int
-	serviceName       string
-	heartbeatInterval time.Duration
+	registryAddr        string
+	selfPort            int
+	serviceName         string
+	heartbeatInterval   time.Duration
+	heartbeatMaxFail    int
+	reconnectBackoff    time.Duration
+	reconnectMaxBackoff time.Duration
 
 	conn     net.Conn
 	connMu   sync.RWMutex
@@ -26,13 +29,24 @@ type Client struct {
 	stopOnce sync.Once
 }
 
-func NewClient(registryAddr string, selfPort int, serviceName string) *Client {
+func NewClient(
+	registryAddr string,
+	selfPort int,
+	serviceName string,
+	heartbeatInterval time.Duration,
+	heartbeatMaxFail int,
+	reconnectBackoff time.Duration,
+	reconnectMaxBackoff time.Duration,
+) *Client {
 	return &Client{
-		registryAddr:      registryAddr,
-		selfPort:          selfPort,
-		serviceName:       serviceName,
-		heartbeatInterval: 10 * time.Second,
-		stopCh:            make(chan struct{}),
+		registryAddr:        registryAddr,
+		selfPort:            selfPort,
+		serviceName:         serviceName,
+		heartbeatInterval:   heartbeatInterval,
+		heartbeatMaxFail:    heartbeatMaxFail,
+		reconnectBackoff:    reconnectBackoff,
+		reconnectMaxBackoff: reconnectMaxBackoff,
+		stopCh:              make(chan struct{}),
 	}
 }
 
@@ -100,8 +114,8 @@ func (c *Client) Deregister() {
 }
 
 func (c *Client) Run(ctx context.Context) {
-	backoff := time.Second
-	maxBackoff := 30 * time.Second
+	backoff := c.reconnectBackoff
+	maxBackoff := c.reconnectMaxBackoff
 
 	for {
 		select {
@@ -128,7 +142,7 @@ func (c *Client) Run(ctx context.Context) {
 			continue
 		}
 
-		backoff = time.Second
+		backoff = c.reconnectBackoff
 
 		ctxReader, cancelReader := context.WithCancel(ctx)
 		doneCh := make(chan struct{})
@@ -167,7 +181,6 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	failCount := 0
-	const maxFailBeforeReconnect = 2
 
 	for {
 		select {
@@ -191,9 +204,9 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 			if err := c.writeFrame(data); err != nil {
 				failCount++
 				log.Printf("[registry] heartbeat failed (%d/%d): %v",
-					failCount, maxFailBeforeReconnect, err)
+					failCount, c.heartbeatMaxFail, err)
 
-				if failCount >= maxFailBeforeReconnect {
+				if failCount >= c.heartbeatMaxFail {
 					return
 				}
 			} else {
