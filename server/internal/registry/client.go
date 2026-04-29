@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -27,6 +27,7 @@ type Client struct {
 	connMu   sync.RWMutex
 	stopCh   chan struct{}
 	stopOnce sync.Once
+	logger   *slog.Logger
 }
 
 func NewClient(
@@ -47,6 +48,7 @@ func NewClient(
 		reconnectBackoff:    reconnectBackoff,
 		reconnectMaxBackoff: reconnectMaxBackoff,
 		stopCh:              make(chan struct{}),
+		logger:              slog.Default().With("component", "registry"),
 	}
 }
 
@@ -102,7 +104,7 @@ func (c *Client) Register(ctx context.Context) error {
 		return fmt.Errorf("registration failed: %s", msg)
 	}
 
-	log.Printf("[registry] registered successfully: %s", r.Response.Message)
+	c.logger.Info("registered", "message", r.Response.Message)
 	return nil
 }
 
@@ -127,7 +129,7 @@ func (c *Client) Run(ctx context.Context) {
 		}
 
 		if err := c.Register(ctx); err != nil {
-			log.Printf("[registry] register failed, retry in %v: %v", backoff, err)
+			c.logger.Warn("register failed, retrying", "error", err, "backoff", backoff)
 			select {
 			case <-ctx.Done():
 				return
@@ -163,7 +165,7 @@ func (c *Client) Run(ctx context.Context) {
 		case <-c.stopCh:
 			return
 		default:
-			log.Printf("[registry] connection lost, reconnect in %v...", backoff)
+			c.logger.Warn("connection lost, reconnecting", "backoff", backoff)
 			time.Sleep(backoff)
 			if backoff < maxBackoff {
 				backoff *= 2
@@ -198,13 +200,15 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 			}
 			data, err := proto.Marshal(msg)
 			if err != nil {
-				log.Printf("[registry] marshal heartbeat: %v", err)
+				c.logger.Warn("marshal heartbeat", "error", err)
 				continue
 			}
 			if err := c.writeFrame(data); err != nil {
 				failCount++
-				log.Printf("[registry] heartbeat failed (%d/%d): %v",
-					failCount, c.heartbeatMaxFail, err)
+				c.logger.Warn("heartbeat failed",
+					"error", err,
+					"fail_count", failCount,
+					"max_fail", c.heartbeatMaxFail)
 
 				if failCount >= c.heartbeatMaxFail {
 					return
@@ -228,22 +232,23 @@ func (c *Client) readLoop(ctx context.Context) {
 
 		data, err := c.readFrame()
 		if err != nil {
-			log.Printf("[registry] read loop: connection error: %v", err)
+			c.logger.Debug("read loop: connection closed", "error", err)
 			return
 		}
 
 		resp := &pb.RegistryMessage{}
 		if err := proto.Unmarshal(data, resp); err != nil {
-			log.Printf("[registry] read loop: unmarshal error: %v", err)
+			c.logger.Warn("read loop: unmarshal error", "error", err)
 			continue
 		}
 
 		r, ok := resp.Payload.(*pb.RegistryMessage_Response)
 		if ok && r != nil {
-			log.Printf("[registry] received: success=%v, message=%s",
-				r.Response.Success, r.Response.Message)
+			c.logger.Debug("registry response",
+				"success", r.Response.Success,
+				"message", r.Response.Message)
 			if !r.Response.Success {
-				log.Printf("[registry] registry rejected us, closing connection")
+				c.logger.Warn("registry rejected, closing connection")
 				c.closeConn()
 				return
 			}

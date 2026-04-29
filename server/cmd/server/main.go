@@ -5,7 +5,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,6 +23,10 @@ func main() {
 	defer cancel()
 
 	cfg := config.Load()
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})).With("service", cfg.ServiceName))
 
 	r := router.New()
 	rpc.RegisterUserService(r, &example.UserService{})
@@ -45,17 +49,18 @@ func main() {
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {
-			log.Fatalf("[main] server error: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
-	log.Printf("[main] started service=%s on %s", cfg.ServiceName, cfg.ListenAddr())
+	slog.Info("started", "addr", cfg.ListenAddr())
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
-	log.Println("[main] shutting down gracefully...")
+	slog.Info("shutting down gracefully")
 	srv.Stop()
-	log.Println("[main] shutdown complete")
+	slog.Info("shutdown complete")
 }

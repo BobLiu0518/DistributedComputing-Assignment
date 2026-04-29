@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 
@@ -19,6 +19,7 @@ type Server struct {
 	router   *router.Router
 	registry *registry.Client
 	listener net.Listener
+	logger   *slog.Logger
 }
 
 func New(addr string, r *router.Router, reg *registry.Client) *Server {
@@ -26,6 +27,7 @@ func New(addr string, r *router.Router, reg *registry.Client) *Server {
 		addr:     addr,
 		router:   r,
 		registry: reg,
+		logger:   slog.Default().With("component", "server"),
 	}
 }
 
@@ -41,7 +43,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.listener = listener
-	log.Printf("[server] listening on %s", s.addr)
+	s.logger.Info("listening", "addr", s.addr)
 
 	for {
 		conn, err := listener.Accept()
@@ -50,7 +52,7 @@ func (s *Server) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			default:
-				log.Printf("[server] accept error: %v", err)
+				s.logger.Error("accept error", "error", err)
 				continue
 			}
 		}
@@ -67,24 +69,31 @@ func (s *Server) Stop() {
 
 func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
+	peer := conn.RemoteAddr().String()
+	logger := s.logger.With("peer", peer)
 	var writeMu sync.Mutex
 
 	for {
 		data, err := codec.ReadFrame(conn)
 		if err != nil {
+			logger.Debug("connection closed", "error", err)
 			return
 		}
 
 		req := &pb.RpcRequest{}
 		if err := proto.Unmarshal(data, req); err != nil {
+			logger.Warn("invalid request", "error", err)
 			writeMu.Lock()
 			s.writeError(conn, "", 400, "invalid request: "+err.Error())
 			writeMu.Unlock()
 			continue
 		}
 
+		reqLogger := logger.With("request_id", req.RequestId, "service", req.Service, "method", req.Method)
+
 		handler, ok := s.router.Route(req.Service, req.Method)
 		if !ok {
+			reqLogger.Warn("method not found")
 			writeMu.Lock()
 			s.writeError(conn, req.RequestId, 404,
 				"method not found: "+req.Service+"."+req.Method)
@@ -92,11 +101,13 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 			continue
 		}
 
+		reqLogger.Debug("handling request")
 		go func(req *pb.RpcRequest, h router.HandlerFunc) {
 			respBytes, handlerErr := h(ctx, req.Payload)
 
 			resp := &pb.RpcResponse{RequestId: req.RequestId}
 			if handlerErr != nil {
+				reqLogger.Error("handler error", "error", handlerErr)
 				resp.Error = &pb.Error{
 					Code:    500,
 					Message: handlerErr.Error(),
@@ -107,14 +118,14 @@ func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {
 
 			respData, err := proto.Marshal(resp)
 			if err != nil {
-				log.Printf("[server] marshal response: %v", err)
+				reqLogger.Error("marshal response", "error", err)
 				return
 			}
 
 			writeMu.Lock()
 			defer writeMu.Unlock()
 			if err := codec.WriteFrame(conn, respData); err != nil {
-				log.Printf("[server] write response: %v", err)
+				reqLogger.Error("write response", "error", err)
 			}
 		}(req, handler)
 	}
@@ -129,5 +140,7 @@ func (s *Server) writeError(conn net.Conn, requestID string, code int32, message
 	if err != nil {
 		return
 	}
-	codec.WriteFrame(conn, data)
+	if err := codec.WriteFrame(conn, data); err != nil {
+		s.logger.Warn("write error response failed", "error", err, "request_id", requestID)
+	}
 }
