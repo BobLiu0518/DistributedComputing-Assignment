@@ -37,8 +37,8 @@ type methodDef struct {
 }
 
 type goType struct {
-	pkgPath string
-	pkgName string
+	pkgPath  string
+	pkgName  string
 	typeName string
 }
 

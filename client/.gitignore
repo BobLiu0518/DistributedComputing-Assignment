@@ -38,5 +38,6 @@ build/
 ### Mac OS ###
 .DS_Store
 
-### Prototype ###
+### Generated code ###
 src/main/java/tech/bobliu/rpc/proto/
+src/main/java/tech/bobliu/rpc/app/*Rpc.java

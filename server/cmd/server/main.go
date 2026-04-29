@@ -1,17 +1,20 @@
 //go:generate go run ./../genproto/
 //go:generate go run ./../genrpc/
+//go:generate go run ./../genrpc-java/
 
 package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"rpc-server/example"
+	"rpc-server/app"
 	"rpc-server/internal/config"
+	"rpc-server/internal/db"
 	"rpc-server/internal/registry"
 	"rpc-server/internal/router"
 	"rpc-server/internal/rpc"
@@ -28,8 +31,20 @@ func main() {
 		Level: slog.LevelInfo,
 	})).With("service", cfg.ServiceName))
 
+	database, err := db.Open(cfg.ServiceName + ".db")
+	if err != nil {
+		slog.Error("open database", "error", err)
+		os.Exit(1)
+	}
+	defer database.Close()
+
+	userSvc := app.NewUserService(database)
+	gachaSvc := app.NewGachaService(database)
+	gachaSvc.SetInstance(fmt.Sprintf("%s:%d", cfg.ServiceName, cfg.Port))
+
 	r := router.New()
-	rpc.RegisterUserService(r, &example.UserService{})
+	rpc.RegisterUserService(r, userSvc)
+	rpc.RegisterGachaService(r, gachaSvc)
 
 	regClient := registry.NewClient(
 		cfg.RegistryAddr,
@@ -41,11 +56,7 @@ func main() {
 		cfg.ReconnectMaxBackoff(),
 	)
 
-	srv := server.New(
-		cfg.ListenAddr(),
-		r,
-		regClient,
-	)
+	srv := server.New(cfg.ListenAddr(), r, regClient)
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {

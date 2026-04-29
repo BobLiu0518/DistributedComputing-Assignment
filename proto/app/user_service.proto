@@ -1,0 +1,39 @@
+syntax = "proto3";
+package app;
+option go_package = "rpc-server/pb/app";
+option java_package = "tech.bobliu.rpc.proto.app";
+option java_multiple_files = true;
+
+message RegisterRequest {
+  string name = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  int64 user_id = 1;
+  string message = 2;
+}
+
+message LoginRequest {
+  string name = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  int64 user_id = 1;
+  string message = 2;
+}
+
+message LogoutRequest {
+  int64 user_id = 1;
+}
+
+message LogoutResponse {
+  string message = 1;
+}
+
+service UserService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+}

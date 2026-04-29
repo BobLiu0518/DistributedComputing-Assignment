@@ -1,0 +1,24 @@
+syntax = "proto3";
+package app;
+option go_package = "rpc-server/pb/app";
+option java_package = "tech.bobliu.rpc.proto.app";
+option java_multiple_files = true;
+
+message DrawRequest {
+  int64 user_id = 1;
+  int32 count = 2;
+}
+
+message Card {
+  string name = 1;
+  int32 stars = 2;
+}
+
+message DrawResponse {
+  repeated Card cards = 1;
+  string instance = 2;
+}
+
+service GachaService {
+  rpc Draw(DrawRequest) returns (DrawResponse);
+}
