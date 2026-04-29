@@ -8,10 +8,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	pb "rpc-server/pb"
 	"rpc-server/internal/codec"
 	"rpc-server/internal/registry"
 	"rpc-server/internal/router"
+	pb "rpc-server/pb"
 )
 
 type Server struct {
@@ -29,19 +29,18 @@ func New(addr string, r *router.Router, reg *registry.Client) *Server {
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	if err := s.registry.Register(ctx); err != nil {
+		return err
+	}
+
+	go s.registry.Run(ctx)
+
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", s.addr)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 	log.Printf("[server] listening on %s", s.addr)
-
-	if err := s.registry.Register(ctx); err != nil {
-		return err
-	}
-
-	go s.registry.HeartbeatLoop(ctx)
-	go s.registry.ReadLoop(ctx)
 
 	for {
 		conn, err := listener.Accept()
@@ -56,6 +55,10 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		go s.handleConnection(ctx, conn)
 	}
+}
+
+func (s *Server) Stop() {
+	s.registry.Stop()
 }
 
 func (s *Server) handleConnection(ctx context.Context, conn net.Conn) {

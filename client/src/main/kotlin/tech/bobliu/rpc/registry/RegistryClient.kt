@@ -126,7 +126,7 @@ class RegistryClient(
                     delay = min(delay * 2, maxDelay)
                 }
             }
-        }.start()
+        }.apply { isDaemon = true }.start()
     }
 
     private inner class RegistryHandler : ChannelInboundHandlerAdapter() {

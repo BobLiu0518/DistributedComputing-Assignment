@@ -10,6 +10,7 @@ import io.netty.channel.socket.nio.NioSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.LengthFieldPrepender
 import io.netty.handler.timeout.IdleStateHandler
+import tech.bobliu.rpc.exception.RpcException
 import tech.bobliu.rpc.proto.RpcRequest
 import tech.bobliu.rpc.proto.RpcResponse
 import java.util.concurrent.CompletableFuture
@@ -32,11 +33,9 @@ class RpcClient {
         } catch (e: Exception) {
             channelCtx.pending.remove(request.requestId)
             if (e is java.util.concurrent.TimeoutException) {
-                throw RuntimeException(
-                    "RPC call timeout for ${request.service}.${request.method}"
-                )
+                throw RpcException(-1, "RPC call timeout for ${request.service}.${request.method}")
             }
-            throw RuntimeException("RPC call failed: ${e.message}", e)
+            throw RpcException(-1, "RPC call failed: ${e.message}", e)
         }
     }
 

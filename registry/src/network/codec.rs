@@ -36,7 +36,6 @@ impl Decoder for RegistryCodec {
         }
 
         if src.len() < HEADER_LEN + len {
-            src.reserve(HEADER_LEN + len - src.len());
             return Ok(None);
         }
 

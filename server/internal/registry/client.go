@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
-	pb "rpc-server/pb"
 	"rpc-server/internal/codec"
+	pb "rpc-server/pb"
 )
 
 type Client struct {
@@ -19,7 +20,11 @@ type Client struct {
 	selfPort          int
 	serviceName       string
 	heartbeatInterval time.Duration
-	conn              net.Conn
+
+	conn     net.Conn
+	connMu   sync.RWMutex
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 func NewClient(registryAddr, selfIP string, selfPort int, serviceName string) *Client {
@@ -29,6 +34,7 @@ func NewClient(registryAddr, selfIP string, selfPort int, serviceName string) *C
 		selfPort:          selfPort,
 		serviceName:       serviceName,
 		heartbeatInterval: 10 * time.Second,
+		stopCh:            make(chan struct{}),
 	}
 }
 
@@ -37,7 +43,10 @@ func (c *Client) Register(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("connect to registry: %w", err)
 	}
+
+	c.connMu.Lock()
 	c.conn = conn
+	c.connMu.Unlock()
 
 	msg := &pb.RegistryMessage{
 		Payload: &pb.RegistryMessage_Register{
@@ -51,24 +60,30 @@ func (c *Client) Register(ctx context.Context) error {
 
 	data, err := proto.Marshal(msg)
 	if err != nil {
+		c.closeConn()
 		return fmt.Errorf("marshal register: %w", err)
 	}
-	if err := codec.WriteFrame(conn, data); err != nil {
+
+	if err := c.writeFrame(data); err != nil {
+		c.closeConn()
 		return fmt.Errorf("write register: %w", err)
 	}
 
-	respData, err := codec.ReadFrame(conn)
+	respData, err := c.readFrame()
 	if err != nil {
+		c.closeConn()
 		return fmt.Errorf("read register response: %w", err)
 	}
 
 	resp := &pb.RegistryMessage{}
 	if err := proto.Unmarshal(respData, resp); err != nil {
+		c.closeConn()
 		return fmt.Errorf("unmarshal register response: %w", err)
 	}
 
 	r, ok := resp.Payload.(*pb.RegistryMessage_Response)
 	if !ok || r == nil || !r.Response.Success {
+		c.closeConn()
 		msg := "unknown error"
 		if r != nil {
 			msg = r.Response.Message
@@ -80,7 +95,53 @@ func (c *Client) Register(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) HeartbeatLoop(ctx context.Context) {
+func (c *Client) Deregister() {
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
+	c.closeConn()
+}
+
+func (c *Client) Run(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.stopCh:
+			return
+		default:
+		}
+
+		ctxReader, cancelReader := context.WithCancel(ctx)
+		doneCh := make(chan struct{})
+
+		go func() {
+			defer close(doneCh)
+			c.readLoop(ctxReader)
+		}()
+
+		c.heartbeatLoop(ctx)
+
+		cancelReader()
+		<-doneCh
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.stopCh:
+			return
+		default:
+			log.Printf("[registry] connection lost, attempting reconnect...")
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+func (c *Client) Stop() {
+	c.Deregister()
+}
+
+func (c *Client) heartbeatLoop(ctx context.Context) {
 	ticker := time.NewTicker(c.heartbeatInterval)
 	defer ticker.Stop()
 
@@ -90,6 +151,8 @@ func (c *Client) HeartbeatLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-c.stopCh:
 			return
 		case <-ticker.C:
 			msg := &pb.RegistryMessage{
@@ -105,20 +168,13 @@ func (c *Client) HeartbeatLoop(ctx context.Context) {
 				log.Printf("[registry] marshal heartbeat: %v", err)
 				continue
 			}
-			if err := codec.WriteFrame(c.conn, data); err != nil {
+			if err := c.writeFrame(data); err != nil {
 				failCount++
 				log.Printf("[registry] heartbeat failed (%d/%d): %v",
 					failCount, maxFailBeforeReconnect, err)
 
 				if failCount >= maxFailBeforeReconnect {
-					log.Printf("[registry] attempting reconnect...")
-					c.conn.Close()
-					if regErr := c.Register(ctx); regErr != nil {
-						log.Printf("[registry] reconnect failed: %v", regErr)
-						return
-					}
-					log.Printf("[registry] reconnected successfully")
-					failCount = 0
+					return
 				}
 			} else {
 				failCount = 0
@@ -127,15 +183,17 @@ func (c *Client) HeartbeatLoop(ctx context.Context) {
 	}
 }
 
-func (c *Client) ReadLoop(ctx context.Context) {
+func (c *Client) readLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-c.stopCh:
+			return
 		default:
 		}
 
-		data, err := codec.ReadFrame(c.conn)
+		data, err := c.readFrame()
 		if err != nil {
 			log.Printf("[registry] read loop: connection error: %v", err)
 			return
@@ -153,9 +211,41 @@ func (c *Client) ReadLoop(ctx context.Context) {
 				r.Response.Success, r.Response.Message)
 			if !r.Response.Success {
 				log.Printf("[registry] registry rejected us, closing connection")
-				c.conn.Close()
+				c.closeConn()
 				return
 			}
 		}
+	}
+}
+
+func (c *Client) writeFrame(data []byte) error {
+	c.connMu.RLock()
+	conn := c.conn
+	c.connMu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("not connected")
+	}
+	return codec.WriteFrame(conn, data)
+}
+
+func (c *Client) readFrame() ([]byte, error) {
+	c.connMu.RLock()
+	conn := c.conn
+	c.connMu.RUnlock()
+
+	if conn == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+	return codec.ReadFrame(conn)
+}
+
+func (c *Client) closeConn() {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+
+	if c.conn != nil {
+		c.conn.Close()
+		c.conn = nil
 	}
 }

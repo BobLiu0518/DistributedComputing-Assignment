@@ -1,5 +1,5 @@
-use tokio::sync::broadcast;
 use crate::proto::ServiceList;
+use tokio::sync::broadcast;
 
 pub struct Notifier {
     tx: broadcast::Sender<ServiceList>,
@@ -18,5 +18,4 @@ impl Notifier {
     pub fn subscribe(&self) -> broadcast::Receiver<ServiceList> {
         self.tx.subscribe()
     }
-
 }

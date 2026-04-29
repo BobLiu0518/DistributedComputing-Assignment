@@ -5,9 +5,7 @@ use tokio_util::codec::Framed;
 
 use crate::config::Config;
 use crate::network::codec::RegistryCodec;
-use crate::proto::{
-    registry_message, RegistryMessage, RegistryResponse, ServiceList,
-};
+use crate::proto::{RegistryMessage, RegistryResponse, ServiceList, registry_message};
 use crate::registry::notifier::Notifier;
 use crate::registry::store::ServiceStore;
 
@@ -121,8 +119,7 @@ async fn handle_connection(
                                     changed,
                                 );
 
-                                registered_instances
-                                    .push((req.ip.clone(), req.port));
+                                registered_instances.push((req.ip.clone(), req.port));
 
                                 let response = RegistryMessage {
                                     payload: Some(registry_message::Payload::Response(
@@ -171,9 +168,9 @@ async fn handle_connection(
 
                                 let service_list = store.build_service_list().await;
                                 let msg = RegistryMessage {
-                                    payload: Some(
-                                        registry_message::Payload::ServiceList(service_list),
-                                    ),
+                                    payload: Some(registry_message::Payload::ServiceList(
+                                        service_list,
+                                    )),
                                 };
                                 framed.send(msg).await?;
                             }

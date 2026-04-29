@@ -52,7 +52,10 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	log.Println("[main] shutting down")
+
+	log.Println("[main] shutting down gracefully...")
+	srv.Stop()
+	log.Println("[main] shutdown complete")
 }
 
 func getEnv(key, defaultVal string) string {
