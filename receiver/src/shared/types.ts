@@ -18,6 +18,7 @@ export interface EmergencyMessage {
   location: string;
   timestamp: number;
   seq: number;
+  msgid: string;
 }
 
 export type ProcessorType =

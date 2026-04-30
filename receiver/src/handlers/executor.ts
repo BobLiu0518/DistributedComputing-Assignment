@@ -1,6 +1,9 @@
 import type { EmergencyAction, EmergencyMessage, NodeRole } from '../shared/types.js';
 import { ACTION_DELAYS } from '../shared/constants.js';
 
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 1000;
+
 let _actionSeq = 0;
 function nextActionId(): string {
   return `action-${Date.now()}-${++_actionSeq}`;
@@ -21,17 +24,28 @@ export async function executeAction(
   const baseMs = ACTION_DELAYS[action.type] ?? 1000;
   const ms = baseMs + Math.floor(Math.random() * baseMs * 0.5);
 
-  try {
-    await delay(ms);
-    if (Math.random() < 0.05) {
-      throw new Error('设备响应超时');
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await delay(attempt === 1 ? ms : Math.min(RETRY_BASE_MS * Math.pow(2, attempt - 1), 8000));
+
+      if (Math.random() < 0.05) {
+        throw new Error('设备响应超时');
+      }
+
+      action.status = 'done';
+      action.finishedAt = Date.now();
+      onStatusChange?.({ ...action });
+      return action;
+    } catch (err: unknown) {
+      if (attempt < MAX_RETRIES) {
+        console.log(`  ↻ 重试 ${attempt}/${MAX_RETRIES}: ${action.label}`);
+      } else {
+        action.status = 'error';
+        action.finishedAt = Date.now();
+        action.error = err instanceof Error ? err.message : String(err);
+        console.log(`  ✗ 失败(已重试${MAX_RETRIES}次): ${action.label} — ${action.error}`);
+      }
     }
-    action.status = 'done';
-    action.finishedAt = Date.now();
-  } catch (err: unknown) {
-    action.status = 'error';
-    action.finishedAt = Date.now();
-    action.error = err instanceof Error ? err.message : String(err);
   }
 
   onStatusChange?.({ ...action });

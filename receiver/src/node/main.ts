@@ -63,7 +63,23 @@ async function main(): Promise<void> {
     socket.emit('node:action', report);
   }
 
+  const processedMsgIds = new Set<string>();
+  const MAX_PROCESSED_IDS = 50000;
+
   async function handleMessage(msg: EmergencyMessage): Promise<void> {
+    if (processedMsgIds.has(msg.msgid)) {
+      return;
+    }
+    if (processedMsgIds.size >= MAX_PROCESSED_IDS) {
+      const toDelete = Math.floor(MAX_PROCESSED_IDS / 2);
+      let count = 0;
+      for (const id of processedMsgIds) {
+        processedMsgIds.delete(id);
+        if (++count >= toDelete) break;
+      }
+    }
+    processedMsgIds.add(msg.msgid);
+
     const rule = DISPATCH_RULES[msg.type];
     if (!rule) {
       return;
@@ -76,7 +92,7 @@ async function main(): Promise<void> {
     }
 
     const actions = createActionsForMessage(msg, processor, processorActions);
-    console.log(`[${nodeLabel}] 收到 #${msg.seq} ${msg.type} @ ${msg.location} → ${actions.length} 个操作`);
+    console.log(`[${nodeLabel}] 收到 #${msg.seq} ${msg.type} @ ${msg.location} (${msg.msgid.slice(0, 8)}) → ${actions.length} 个操作`);
 
     for (const action of actions) {
       reportAction(action);

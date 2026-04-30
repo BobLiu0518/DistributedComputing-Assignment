@@ -1,4 +1,5 @@
 import * as blessed from 'blessed';
+import { randomUUID } from 'node:crypto';
 import locationCategories from '../data/locations.json';
 import emergencies from '../data/emergencies.json';
 
@@ -30,10 +31,12 @@ interface Message {
   location: Location;
   timestamp: number;
   seq: number;
+  msgid: string;
 }
 
 interface SendResult {
   seq: number;
+  msgid: string;
   type: MessageType;
   location: Location;
   ok: boolean;
@@ -61,6 +64,7 @@ function newMessage(): Message {
     location,
     timestamp: Date.now(),
     seq: messageId++,
+    msgid: randomUUID(),
   };
 }
 
@@ -97,10 +101,10 @@ async function sendOne(msg: Message): Promise<SendResult> {
       },
       body: JSON.stringify(msg),
     });
-    return { seq: msg.seq, type: msg.type, location: msg.location, ok: res.ok, status: res.status };
+    return { seq: msg.seq, msgid: msg.msgid, type: msg.type, location: msg.location, ok: res.ok, status: res.status };
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    return { seq: msg.seq, type: msg.type, location: msg.location, ok: false, errorMessage: errMsg };
+    return { seq: msg.seq, msgid: msg.msgid, type: msg.type, location: msg.location, ok: false, errorMessage: errMsg };
   }
 }
 
