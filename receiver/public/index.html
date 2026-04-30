@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MQ 校园应急监控中心</title>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<script src="https://unpkg.com/petite-vue@0.4.1/dist/petite-vue.iife.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100vh;
+    overflow: hidden;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f0f2f5;
+    color: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    background: #fff;
+    border-bottom: 1px solid #e8e8e8;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .header h1 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+  .header .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #52c41a;
+    display: inline-block;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .header .status-text { font-size: 0.85rem; color: #666; }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    padding: 16px 24px;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .stat-card .stat-value { font-size: 1.6rem; font-weight: 700; color: #1a1a2e; }
+  .stat-card .stat-label { font-size: 0.78rem; color: #999; margin-top: 2px; }
+  .stat-card.warn .stat-value { color: #fa8c16; }
+  .stat-card.error .stat-value { color: #f5222d; }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 0 24px 24px;
+    flex: 1;
+    min-height: 0;
+  }
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    font-weight: 600;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .msg-card {
+    padding: 10px 12px;
+    margin: 4px 0;
+    border-radius: 6px;
+    border-left: 3px solid #1890ff;
+    background: #fafafa;
+    font-size: 0.85rem;
+    animation: slideIn 0.2s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .msg-card .msg-meta { color: #999; font-size: 0.75rem; margin-top: 4px; }
+  .msg-card .msg-type {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .type-火灾 { background: #fff1f0; color: #cf1322; }
+  .type-燃气泄漏 { background: #fff7e6; color: #d46b08; }
+  .type-设备过热 { background: #fff7e6; color: #d46b08; }
+  .type-爆炸 { background: #fff1f0; color: #cf1322; }
+  .type-恐怖袭击 { background: #fff1f0; color: #a8071a; }
+  .type-水管爆裂 { background: #e6f7ff; color: #096dd9; }
+  .type-非法入侵 { background: #fff7e6; color: #d46b08; }
+  .type-人员伤亡 { background: #fff1f0; color: #cf1322; }
+  .type-生化泄漏 { background: #f9f0ff; color: #722ed1; }
+  .type-打架斗殴 { background: #fff7e6; color: #d46b08; }
+  .type-食物中毒 { background: #f6ffed; color: #389e0d; }
+  .type-电梯困人 { background: #e6f7ff; color: #096dd9; }
+  .type-踩踏事件 { background: #fff1f0; color: #cf1322; }
+
+  .action-card {
+    border: 1px solid #f0f0f0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 4px 0;
+    font-size: 0.84rem;
+    transition: all 0.2s;
+  }
+  .action-card.pending { border-left: 3px solid #d9d9d9; background: #fafafa; }
+  .action-card.running { border-left: 3px solid #1890ff; background: #e6f7ff; }
+  .action-card.done { border-left: 3px solid #52c41a; background: #f6ffed; }
+  .action-card.error { border-left: 3px solid #f5222d; background: #fff1f0; }
+
+  .action-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+  .action-status.pending { background: #f5f5f5; color: #999; }
+  .action-status.running { background: #e6f7ff; color: #1890ff; }
+  .action-status.done { background: #f6ffed; color: #52c41a; }
+  .action-status.error { background: #fff1f0; color: #f5222d; }
+
+  .action-card .action-node {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.72rem;
+    color: #666;
+  }
+  .action-card .action-time { font-size: 0.72rem; color: #bbb; float: right; }
+
+  .empty-state {
+    text-align: center;
+    color: #bbb;
+    padding: 40px 20px;
+    font-size: 0.9rem;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    padding: 8px 16px;
+    flex-wrap: wrap;
+  }
+  .filter-chip {
+    padding: 3px 10px;
+    border-radius: 14px;
+    font-size: 0.78rem;
+    border: 1px solid #d9d9d9;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .filter-chip:hover { border-color: #1890ff; color: #1890ff; }
+  .filter-chip.active { background: #1890ff; color: #fff; border-color: #1890ff; }
+</style>
+</head>
+<body v-scope>
+
+<div class="header">
+  <div>
+    <h1><span class="status-dot"></span>校园应急监控中心</h1>
+  </div>
+  <div class="status-text">
+    节点: {{ store.connectedNodes.join(', ') || '等待节点...' }}
+    | 消息总数: {{ totalMessages }}
+  </div>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-value">{{ totalMessages }}</div>
+    <div class="stat-label">接收消息</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ totalActions }}</div>
+    <div class="stat-label">触发操作</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ runningCount }}</div>
+    <div class="stat-label">执行中</div>
+  </div>
+  <div class="stat-card warn">
+    <div class="stat-value">{{ errorCount }}</div>
+    <div class="stat-label">操作失败</div>
+  </div>
+</div>
+
+<div class="filter-row">
+  <span style="font-size:0.8rem;color:#999;line-height:28px;margin-right:4px;">筛选:</span>
+  <span class="filter-chip" :class="{ active: store.filterType === 'all' }" @click="store.filterType='all'">全部</span>
+  <span class="filter-chip" :class="{ active: store.filterType === t }" v-for="t in types" @click="store.filterType=t">{{ t }}</span>
+</div>
+
+<div class="main-grid">
+  <div class="panel">
+    <div class="panel-header">
+      <span>📨 消息流</span>
+      <span style="font-size:0.75rem;color:#999">{{ filteredMessages.length }} 条</span>
+    </div>
+    <div class="panel-body">
+      <div v-if="filteredMessages.length === 0" class="empty-state">
+        等待接收紧急消息...
+      </div>
+      <div class="msg-card" v-for="m in filteredMessages">
+        <span class="msg-type" :class="'type-' + m.type">{{ m.type }}</span>
+        <span style="margin-left:6px;">{{ m.location }}</span>
+        <span style="margin-left:8px;color:#999;font-size:0.72rem;">#{{ m.seq }}</span>
+        <div class="msg-meta">
+          节点: {{ m.nodeLabel || m.node }}
+          | {{ formatTime(m.timestamp) }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <span>⚡ 应急操作</span>
+      <span style="font-size:0.75rem;color:#999">{{ filteredActions.length }} 条</span>
+    </div>
+    <div class="panel-body">
+      <div v-if="filteredActions.length === 0" class="empty-state">
+        暂无应急操作
+      </div>
+      <div class="action-card" :class="a.status" v-for="a in filteredActions">
+        <span class="action-status" :class="a.status">{{ statusLabel(a.status) }}</span>
+        <strong style="margin-left:6px;">{{ a.label }}</strong>
+        <span class="action-node">{{ a.nodeLabel || a.node }}</span>
+        <span class="action-time" v-if="a.startedAt">{{ formatTime(a.startedAt) }}</span>
+        <div v-if="a.message" style="margin-top:4px;font-size:0.75rem;color:#888;">
+          {{ a.message.type }} @ {{ a.message.location }}
+        </div>
+        <div v-if="a.error" style="margin-top:2px;font-size:0.72rem;color:#f5222d;">
+          错误: {{ a.error }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const STATE_TYPES = ['火灾','燃气泄漏','设备过热','爆炸','恐怖袭击','水管爆裂','非法入侵','人员伤亡','生化泄漏','打架斗殴','食物中毒','电梯困人','踩踏事件'];
+
+const store = PetiteVue.reactive({
+  filterType: 'all',
+  connectedNodes: [],
+  reports: [],
+});
+
+const socket = io();
+socket.on('reports:init', (data) => {
+  store.reports = data || [];
+  store.connectedNodes = [...new Set(store.reports.map(r => r.nodeLabel || r.node))];
+});
+socket.on('report:new', (report) => {
+  store.reports.unshift(report);
+  if (store.reports.length > 500) store.reports.length = 500;
+  store.connectedNodes = [...new Set(store.reports.map(r => r.nodeLabel || r.node))];
+});
+
+PetiteVue.createApp({
+  store,
+
+  get types() { return STATE_TYPES; },
+
+  get totalMessages() {
+    const seen = new Set();
+    return this.store.reports.filter(r => {
+      const key = `${r.action.message?.seq}-${r.action.message?.type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).length;
+  },
+
+  get totalActions() {
+    return this.store.reports.length;
+  },
+
+  get runningCount() {
+    return this.store.reports.filter(r => r.action.status === 'running').length;
+  },
+
+  get errorCount() {
+    return this.store.reports.filter(r => r.action.status === 'error').length;
+  },
+
+  get filteredMessages() {
+    const seen = new Set();
+    const msgs = [];
+    for (const r of this.store.reports) {
+      if (!r.action.message) continue;
+      const key = `${r.action.message.seq}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (this.store.filterType !== 'all' && r.action.message.type !== this.store.filterType) continue;
+      msgs.push({ ...r.action.message, node: r.node, nodeLabel: r.nodeLabel });
+    }
+    return msgs.slice(0, 50);
+  },
+
+  get filteredActions() {
+    let actions = this.store.reports.map(r => r.action);
+    if (this.store.filterType !== 'all') {
+      actions = actions.filter(a => a.message?.type === this.store.filterType);
+    }
+    return actions.slice(0, 50);
+  },
+
+  formatTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const h = d.getHours().toString().padStart(2,'0');
+    const m = d.getMinutes().toString().padStart(2,'0');
+    const s = d.getSeconds().toString().padStart(2,'0');
+    return `${h}:${m}:${s}`;
+  },
+
+  statusLabel(s) {
+    return { pending: '等待', running: '执行中', done: '已完成', error: '失败' }[s] || s;
+  },
+}).mount();
+</script>
+</body>
+</html>

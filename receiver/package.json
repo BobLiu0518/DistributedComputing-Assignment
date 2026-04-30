@@ -1,0 +1,25 @@
+{
+  "name": "mq-receiver",
+  "version": "1.0.0",
+  "description": "Campus emergency MQ receiver with web dashboard",
+  "scripts": {
+    "start": "tsx src/node/main.ts",
+    "dashboard": "tsx src/dashboard/server.ts",
+    "dev": "tsx watch src/node/main.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^25.6.0",
+    "tsx": "^4.19.0",
+    "typescript": "^6.0.3"
+  }
+}
