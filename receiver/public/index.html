@@ -481,7 +481,7 @@
             <span class="msg-type" :class="'type-' + m.type">{{ m.type }}</span>
             <span style="margin-left: 6px">{{ m.location }}</span>
             <span style="margin-left: 8px; color: #999; font-size: 0.72rem">#{{ m.seq }}</span>
-            <div class="msg-meta">节点: {{ m.nodeLabel || m.node }} | {{ formatTime(m.timestamp) }}</div>
+            <div class="msg-meta">{{ formatTime(m.timestamp) }}</div>
           </div>
         </div>
       </div>
@@ -528,6 +528,7 @@
         reports: [],
         queueAlerts: [],
         monitorActive: false,
+        liveMessages: [],
       });
 
       const socket = io();
@@ -546,6 +547,10 @@
       socket.on('monitor:queues', (alerts) => {
         store.queueAlerts = alerts || [];
       });
+      socket.on('message:new', (msg) => {
+        store.liveMessages.unshift(msg);
+        if (store.liveMessages.length > 100) store.liveMessages.length = 100;
+      });
 
       PetiteVue.createApp({
         store,
@@ -555,17 +560,18 @@
         },
 
         get totalMessages() {
-          const seen = new Set();
-          return this.store.reports.filter((r) => {
-            const key = `${r.action.message?.seq}-${r.action.message?.type}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          }).length;
+          if (this.store.queueAlerts.length === 0) return 0;
+          return Math.max(...this.store.queueAlerts.map((q) => q.stats.enqueueCount));
         },
 
         get totalActions() {
-          return this.store.reports.length;
+          const seen = new Set();
+          return this.store.reports.filter((r) => {
+            const id = r.action.id;
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          }).length;
         },
 
         get runningCount() {
@@ -579,13 +585,12 @@
         get filteredMessages() {
           const seen = new Set();
           const msgs = [];
-          for (const r of this.store.reports) {
-            if (!r.action.message) continue;
-            const key = `${r.action.message.seq}`;
+          for (const m of this.store.liveMessages) {
+            const key = `${m.seq}-${m.type}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            if (this.store.filterType !== 'all' && r.action.message.type !== this.store.filterType) continue;
-            msgs.push({ ...r.action.message, node: r.node, nodeLabel: r.nodeLabel });
+            if (this.store.filterType !== 'all' && m.type !== this.store.filterType) continue;
+            msgs.push(m);
           }
           return msgs.slice(0, 50);
         },

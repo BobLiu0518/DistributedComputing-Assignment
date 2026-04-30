@@ -1,9 +1,10 @@
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { DASHBOARD_PORT, MONITOR_INTERVAL_MS } from '../shared/constants.js';
-import { setAuth } from '../shared/consumer.js';
+import { DASHBOARD_PORT, MONITOR_INTERVAL_MS, consumerQueueName } from '../shared/constants.js';
+import { setAuth } from '../shared/auth.js';
 import { fetchQueueAlerts } from '../shared/monitor.js';
+import { startStompConsumer } from '../shared/stomp-consumer.js';
 import type { NodeReport, QueueAlert } from '../shared/types.js';
 
 function parseAuthArgs(): { username?: string; password?: string } {
@@ -94,6 +95,23 @@ httpServer.listen(DASHBOARD_PORT, () => {
   if (username && password) {
     setAuth(username, password);
     startMonitor();
+
+    const dashController = new AbortController();
+    const dashQueue = consumerQueueName('dashboard');
+
+    startStompConsumer(
+      {
+        username,
+        password,
+        queueName: dashQueue,
+        onMessage: (msg) => {
+          io.emit('message:new', msg);
+        },
+      },
+      dashController.signal,
+    ).catch((err) => console.error('[dashboard] STOMP 异常:', err));
+
+    process.on('SIGINT', () => dashController.abort());
   } else {
     console.log(`[monitor] 未提供凭证（--user --password），堆积监控未启动`);
     console.log(`用法: pnpm dashboard --user=xxx --password=xxx`);

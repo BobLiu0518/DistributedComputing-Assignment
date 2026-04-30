@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 import { io, Socket } from 'socket.io-client';
-import { consumeLoop, setAuth, verifyConnection } from '../shared/consumer.js';
+import { startStompConsumer } from '../shared/stomp-consumer.js';
 import { DISPATCH_RULES, PROCESSOR_LABELS, PROCESSOR_ACTIONS, consumerQueueName, DASHBOARD_URL } from '../shared/constants.js';
 import { createActionsForMessage, executeAction } from '../handlers/executor.js';
 import type { EmergencyMessage, ProcessorType, NodeReport, EmergencyAction } from '../shared/types.js';
@@ -35,19 +35,9 @@ async function main(): Promise<void> {
   const { processor, username, password } = parseArgs();
   const nodeLabel = PROCESSOR_LABELS[processor];
   const myActions = PROCESSOR_ACTIONS[processor];
-  const clientId = `processor-${processor}-${Date.now()}`;
 
   console.log(`\n=== MQ 订阅处理器 - ${nodeLabel} ===`);
-  console.log(`处理器ID: ${clientId}`);
   console.log(`负责操作: ${myActions.join(', ')}`);
-
-  setAuth(username, password);
-  const verify = await verifyConnection();
-  if (!verify.ok) {
-    console.error(`ActiveMQ 认证失败: ${verify.message}`);
-    process.exit(1);
-  }
-  console.log(`ActiveMQ: ${verify.message}`);
 
   const socket: Socket = io(DASHBOARD_URL, {
     reconnection: true,
@@ -87,9 +77,9 @@ async function main(): Promise<void> {
       return;
     }
 
-    // 从分发规则中筛选本处理器负责的操作
     const processorActions = rule.actions.filter((a) => myActions.includes(a.type));
     if (processorActions.length === 0) {
+      console.log(`[${nodeLabel}] 跳过 #${msg.seq} ${msg.type} @ ${msg.location} (${msg.msgid.slice(0, 8)}) — 无本处理器负责的操作`);
       return;
     }
 
@@ -134,7 +124,20 @@ async function main(): Promise<void> {
   const queueName = consumerQueueName(processor);
   console.log(`消费队列: ${queueName}`);
 
-  await consumeLoop(queueName, clientId, handleMessage, abortController.signal);
+  await startStompConsumer(
+    {
+      username,
+      password,
+      queueName,
+      onMessage: handleMessage,
+      onStatusChange: (connected) => {
+        if (connected) {
+          console.log(`[${nodeLabel}] ActiveMQ: 连接成功`);
+        }
+      },
+    },
+    abortController.signal,
+  );
 }
 
 main().catch((err) => {

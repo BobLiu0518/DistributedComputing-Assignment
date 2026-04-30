@@ -5,7 +5,7 @@ import {
   BACKLOG_CRITICAL_THRESHOLD,
   PROCESSOR_LABELS,
 } from './constants.js';
-import { getAuthHeader } from './consumer.js';
+import { getAuthHeader } from './auth.js';
 import type { ProcessorType, QueueAlert, AlertLevel } from './types.js';
 
 interface JolokiaResponse {
@@ -68,47 +68,52 @@ async function findConsumerQueueMBeans(): Promise<QueueMBean[]> {
   console.log(`[monitor] 搜索到 ${all.length} 个 Queue`);
 
   return all
-    .filter((mbean) => mbean.includes('Consumer.') && mbean.includes(VIRTUAL_TOPIC_NAME))
+    .filter((mbean) =>
+      mbean.includes('Consumer.') &&
+      mbean.includes(VIRTUAL_TOPIC_NAME) &&
+      !mbean.includes('Advisory') &&
+      !mbean.includes(',view=') &&
+      !mbean.includes(',subType='),
+    )
     .map((mbean) => ({
       mbean,
       processor: parseProcessor(mbean),
     }));
 }
 
-async function readQueueStats(mbean: string): Promise<{ enqueue: number; dequeue: number; consumers: number }> {
+async function readQueueStats(mbean: string): Promise<{ queueSize: number; consumers: number; enqueueCount: number } | null> {
   const result = await jolokiaPOST({
     type: 'read',
     mbean,
-    attribute: ['EnqueueCount', 'DequeueCount', 'ConsumerCount'],
+    attribute: ['QueueSize', 'ConsumerCount', 'EnqueueCount'],
   });
 
-  if (!result || result.status !== 200) return { enqueue: 0, dequeue: 0, consumers: 0 };
-  const v = result.value as Record<string, number>;
+  if (!result || result.status !== 200) return null;
 
+  const v = result.value as Record<string, number>;
   return {
-    enqueue: v.EnqueueCount ?? 0,
-    dequeue: v.DequeueCount ?? 0,
+    queueSize: v.QueueSize ?? 0,
     consumers: v.ConsumerCount ?? 0,
+    enqueueCount: v.EnqueueCount ?? 0,
   };
 }
 
-function computeAlert(processor: ProcessorType, enqueue: number, dequeue: number, consumers: number): QueueAlert {
-  const backlog = enqueue - dequeue;
+function computeAlert(processor: ProcessorType, queueSize: number, consumers: number, enqueueCount: number): QueueAlert {
   let level: AlertLevel;
   let message: string;
 
-  if (consumers === 0 && backlog > 0) {
+  if (consumers === 0 && queueSize > 0) {
     level = 'critical';
-    message = `无消费者，${backlog} 条堆积`;
-  } else if (backlog >= BACKLOG_CRITICAL_THRESHOLD) {
+    message = `无消费者，${queueSize} 条堆积`;
+  } else if (queueSize >= BACKLOG_CRITICAL_THRESHOLD) {
     level = 'critical';
-    message = `堆积 ${backlog} 条`;
-  } else if (backlog >= BACKLOG_WARN_THRESHOLD) {
+    message = `堆积 ${queueSize} 条`;
+  } else if (queueSize >= BACKLOG_WARN_THRESHOLD) {
     level = 'warn';
-    message = `堆积 ${backlog} 条`;
+    message = `堆积 ${queueSize} 条`;
   } else {
     level = 'ok';
-    message = backlog > 0 ? `${backlog} 条` : '空闲';
+    message = queueSize > 0 ? `${queueSize} 条` : '空闲';
   }
 
   return {
@@ -116,7 +121,13 @@ function computeAlert(processor: ProcessorType, enqueue: number, dequeue: number
     label: PROCESSOR_LABELS[processor],
     level,
     message,
-    stats: { enqueueCount: enqueue, dequeueCount: dequeue, consumerCount: consumers, backlog, timestamp: Date.now() },
+    stats: {
+      enqueueCount,
+      dequeueCount: 0,
+      consumerCount: consumers,
+      backlog: queueSize,
+      timestamp: Date.now(),
+    },
   };
 }
 
@@ -128,7 +139,8 @@ export async function fetchQueueAlerts(): Promise<QueueAlert[]> {
   for (const q of queues) {
     if (!q.processor) continue;
     const s = await readQueueStats(q.mbean);
-    alerts.push(computeAlert(q.processor, s.enqueue, s.dequeue, s.consumers));
+    if (!s) continue;
+    alerts.push(computeAlert(q.processor, s.queueSize, s.consumers, s.enqueueCount));
   }
   return alerts;
 }

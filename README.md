@@ -11,40 +11,43 @@
 │           VirtualTopic.campus.emergency                             │
 │                                                                     │
 │  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐     │
-│  │ Consumer.gate-   │ │ Consumer.sms-    │ │ Consumer.alarm-  │     │
-│  │ controller.      │ │ sender.          │ │ controller.      │     │
+│  │ Consumer.gate-   │ │ Consumer.sms-    │ │ Consumer.dash-   │     │
+│  │ controller.      │ │ sender.          │ │ board.           │     │
 │  │ VirtualTopic...  │ │ VirtualTopic...  │ │ VirtualTopic...  │     │
 │  │   (持久 Queue)    │ │   (持久 Queue)    │ │   (持久 Queue)    │     │
 │  └────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘     │
 │           │                    │                    │               │
-│  Dashboard ──── Jolokia JMX ───┘ (每10s查堆积)      │               │
+│  Dashboard ──── Jolokia JMX ───┤ (每10s查堆积)      │               │
 └───────────┼────────────────────┼────────────────────┼───────────────┘
-            │ REST GET           │                    │
-     ┌──────▼──┐          ┌──────▼──┐          ┌──────▼──┐
-     │ 闸机    │          │ 短信    │          │ 警报    │  ... 更多
-     │ 控制器   │          │ 发送器   │          │ 控制器   │
-     │ 实例N   │          │ 实例N   │          │ 实例N   │
-     └────┬────┘          └────┬────┘          └────┬────┘
-          │                    │                    │   WebSocket
-          └────────────────────┼────────────────────┘
+            │ STOMP/WebSocket    │                    │ STOMP/WebSocket
+     ┌──────▼──┐          ┌──────▼──┐          ┌──────▼──────────┐
+     │ 闸机    │          │ 短信    │          │ Dashboard 自订阅 │
+     │ 控制器   │          │ 发送器   │          │ (消息流数据源)    │
+     │ 实例N   │          │ 实例N   │          └──────┬───────────┘
+     └────┬────┘          └────┬────┘                │
+          │                    │    Socket.io        │ Socket.io
+          └────────────────────┼─────────────────────┘
                                │
-                         Socket.io ─────────── Dashboard + Web UI
+                         Socket.io ─────────── Web UI (Petite-Vue)
 ```
 
-**Virtual Topic 语义：** 生产者发到 `VirtualTopic.campus.emergency`，每个消费者组自动创建独立的持久 Queue `Consumer.{processor}.VirtualTopic...`。同组内多实例共享一个 Queue（竞争消费），消费者离线后消息持久堆积不丢失。
+**Virtual Topic 语义：** 生产者发到 `VirtualTopic.campus.emergency`，每个消费者组自动创建独立的持久 Queue `Consumer.{name}.VirtualTopic...`。同组内多实例共享一个 Queue（竞争消费），消费者离线后消息持久堆积不丢失。
+
+**STOMP over WebSocket：** 各处理器通过 STOMP over WebSocket 长连接消费消息。WebSocket 断开时订阅自动清理，无僵尸 consumer 残留。Nginx 代理 `wss://mq.usst2.bobliu.tech/ws/` → ActiveMQ WebSocket transport (61614)。
 
 ### 发送端 (sender/)
 
 - TypeScript + Node.js + blessed 终端界面
+- 支持 CLI 传参跳过登录：`--user=xxx --password=xxx`
 - 通过 ActiveMQ REST API 向 VirtualTopic 发布紧急事件消息
-- 支持 start/stop/exit 命令控制发送
-- 每次发送 50 条消息，间隔 1 秒
+- 命令：`start`（连续发送）、`send N`（一次发送 N 条，默认 50）、`stop`、`exit`
 
-### 接收端 (receiver/) — Virtual Topic 模式
+### 接收端 (receiver/) — STOMP 消费模式
 
 - TypeScript + Node.js 多进程架构
 - 每个进程通过 `--processor=` 参数指定处理器类型
-- 各处理器从独立持久 Queue `Consumer.{processor}.VirtualTopic.campus.emergency` 消费
+- 各处理器通过 **STOMP over WebSocket** 从独立持久 Queue `Consumer.{processor}.VirtualTopic.campus.emergency` 消费
+- STOMP 长连接，断开自动清理订阅
 - 同处理器可启动多个实例，共享一个 Queue（竞争消费，负载均衡）
 - 处理器离线期间消息持久堆积，恢复后继续消费
 - 应急操作为模拟耗时任务，延迟为基准值 × (1.0 ~ 1.5) 随机浮动
@@ -69,7 +72,8 @@
 - 严重堆积时显示红色告警横幅
 - 实时显示消息流、操作状态、统计数据
 - 支持按紧急类型筛选
-- Jolokia JMX 每 10s 轮询各消费者 Queue 的 EnqueueCount / DequeueCount / ConsumerCount
+- **Dashboard 自订阅**：Dashboard 启动时通过 STOMP 消费自己的 VirtualTopic 队列 `Consumer.dashboard.VirtualTopic.campus.emergency`，获取全量消息流（含被 skip 的消息）
+- **JMX 指标**：`接收消息`（EnqueueCount）和队列卡片数据（QueueSize、ConsumerCount）均通过 Jolokia JMX 从 Broker 直接读取，不依赖处理器上报
 
 ## 消息格式
 
@@ -98,7 +102,7 @@
 | 火灾     | 保卫处         | 启动火灾警报 + 闸机全开        |
 | 燃气泄漏 | 保卫处、医务室 | 切断电源 + 疏散短信            |
 | 爆炸     | 保卫处、医务室 | 启动警报 + 全校短信 + 医疗调度 |
-| 恐怖袭击 | 保卫处、医务室 | 启动警报 + 闸机锁死 + 全校短信 |
+| 恐怖袭击 | 保卫处、医务室 | 启动警报 + 闸机全开 + 全校短信 |
 | 水管爆裂 | 保卫处         | 关闭水阀                       |
 | 非法入侵 | 保卫处         | 启动警报 + 闸机锁死 + 通知保安 |
 | 人员伤亡 | 医务室         | 医疗调度 + 通知医务室          |
@@ -127,16 +131,18 @@ cd ../receiver && pnpm install
 ```bash
 cd receiver
 
-# 基础模式（无堆积监控）
+# 基础模式（无堆积监控、无消息流）
 pnpm dashboard
 
-# 带堆积监控（需 ActiveMQ 凭据）
+# 完整模式（需 ActiveMQ 凭据）
 pnpm dashboard --user=YOUR_USERNAME --pass=YOUR_PASSWORD
 ```
 
 打开浏览器访问 `http://localhost:3456`
 
-Dashboard 提供各处理器队列堆积实时监控（需凭据）：每 10s 通过 Jolokia JMX 查询，堆积 ≥500 黄色警告，≥2000 红色严重告警，无消费者时同样红色。
+Dashboard 在完整模式下同时启动：
+- **Jolokia JMX 监控**（每 10s）：查询各处理器队列的 QueueSize、ConsumerCount、EnqueueCount
+- **STOMP 自订阅**：消费 `Consumer.dashboard.VirtualTopic.campus.emergency`，作为消息流数据源
 
 ### 3. 启动接收端处理器
 
@@ -144,39 +150,26 @@ Dashboard 提供各处理器队列堆积实时监控（需凭据）：每 10s �
 
 ```bash
 cd receiver
-
-# 闸机控制器
 pnpm start --processor=gate-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
-
-# 短信发送器
 pnpm start --processor=sms-sender --user=YOUR_USERNAME --pass=YOUR_PASSWORD
-
-# 警报控制器
 pnpm start --processor=alarm-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
-
-# 电源控制器
 pnpm start --processor=power-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
-
-# 水阀控制器
 pnpm start --processor=valve-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
-
-# 医疗调度器
 pnpm start --processor=medical-dispatcher --user=YOUR_USERNAME --pass=YOUR_PASSWORD
 ```
 
-每个处理器可以启动多个实例，同一处理器类型的多个实例共享一个 Queue（竞争消费，负载均衡）。每个操作有 5% 模拟失败率，3 次重试（指数退避 1s→2s→4s）。
+每个处理器通过 STOMP over WebSocket 消费独立持久队列，同类型多实例共享同一队列（竞争消费）。每个操作有 5% 模拟失败率，3 次重试（指数退避 1s→2s→4s）。
 
 ### 4. 启动发送端
 
 ```bash
 cd sender
-npx tsx index.ts
+npx tsx index.ts --user=YOUR_USERNAME --password=YOUR_PASSWORD
 ```
 
-在 TUI 界面中输入 ActiveMQ 凭据登录后，输入 `start` 开始发送消息。
-
 发送端命令：
-- `start` — 开始批量发送（50条/秒）
+- `start` — 连续发送（50条/秒）
+- `send N` — 一次发送 N 条（不填默认 50）
 - `stop` — 停止发送
 - `exit` — 退出
 
@@ -198,14 +191,28 @@ MQ/
     │   └── index.html      # Web 监控界面
     └── src/
         ├── shared/
-        │   ├── types.ts    # 类型定义
-        │   ├── constants.ts # 配置 + 分发规则 + 处理器定义
-        │   ├── consumer.ts  # ActiveMQ REST 消费者
-        │   └── monitor.ts   # Jolokia JMX 队列监控
+        │   ├── types.ts          # 类型定义
+        │   ├── constants.ts      # 配置 + 分发规则 + 处理器定义
+        │   ├── auth.ts           # ActiveMQ 认证
+        │   ├── stomp-consumer.ts # STOMP over WebSocket 消费者
+        │   └── monitor.ts        # Jolokia JMX 队列监控
         ├── handlers/
-        │   └── executor.ts  # 应急操作执行器（3次重试 + 退避）
+        │   └── executor.ts       # 应急操作执行器（3次重试 + 退避）
         ├── node/
-        │   └── main.ts      # 处理器主进程
+        │   └── main.ts           # 处理器主进程
         └── dashboard/
-            └── server.ts    # Dashboard + Socket.io 服务端
+            └── server.ts         # Dashboard + Socket.io + Dashboard STOMP 自订阅
 ```
+
+## Dashboard 指标说明
+
+| 指标 | 数据来源 | 含义 |
+|------|----------|------|
+| 消息总数 | JMX EnqueueCount | Topic 自始以来的总消息数 |
+| 接收消息 | JMX EnqueueCount | 同上 |
+| 触发操作 | Socket.io | 去重后的操作数（按 actionId） |
+| 执行中 | Socket.io | 当前 running 状态的操作 |
+| 操作失败 | Socket.io | 最终 error 状态的操作 |
+| 消息流 | Dashboard STOMP 自订阅 | 全量消息滚动（含 skip 的） |
+| 队列卡片 | JMX (QueueSize, ConsumerCount) | 每 10s 更新 |
+| 堆积告警 | JMX QueueSize | ≥500 黄，≥2000 或无消费者 红 |

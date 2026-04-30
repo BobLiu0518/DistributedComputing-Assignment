@@ -119,9 +119,9 @@ function formatLine(r: SendResult): string {
   return `{red-fg}[${t}] #${r.seq} FAIL: ${r.type} @ ${r.location} (HTTP ${r.status}){/red-fg}`;
 }
 
-async function sendBatch(): Promise<void> {
+async function sendBatch(count: number = BATCH_SIZE): Promise<void> {
   const tasks: Promise<void>[] = [];
-  for (let i = 0; i < BATCH_SIZE; i++) {
+  for (let i = 0; i < count; i++) {
     const msg = newMessage();
     tasks.push(
       sendOne(msg).then((r) => {
@@ -200,8 +200,9 @@ function buildMainUI(): void {
   logLine(`{cyan-fg}Topic:  ${TOPIC_NAME}{/cyan-fg}`);
   logLine('{cyan-fg}---{/cyan-fg}');
   logLine('{white-fg}Commands:{/white-fg}');
-  logLine('  {green-fg}start{/green-fg} - Begin sending messages');
-  logLine('  {yellow-fg}stop{/yellow-fg}  - Stop sending messages');
+  logLine('  {green-fg}send N{/green-fg} - Send N messages once (default 50)');
+  logLine('  {green-fg}start{/green-fg} - Begin sending (continuous)');
+  logLine('  {yellow-fg}stop{/yellow-fg}  - Stop sending');
   logLine('  {red-fg}exit{/red-fg}  - Quit{/red-fg}');
   logLine('{cyan-fg}---{/cyan-fg}');
 
@@ -256,6 +257,19 @@ function buildMainUI(): void {
         case 'exit':
           cmdExit();
           return;
+        default:
+          if (cmd.startsWith('send')) {
+            const parts = cmd.split(/\s+/);
+            const count = parts.length > 1 ? parseInt(parts[1], 10) : BATCH_SIZE;
+            if (isNaN(count) || count <= 0) {
+              logLine(`{red-fg}[${ts()}] Invalid count: ${parts[1]}{/red-fg}`);
+            } else {
+              logLine(`{green-fg}[${ts()}] Sending ${count} messages...{/green-fg}`);
+              refresh();
+              sendBatch(count);
+            }
+          }
+          break;
       }
       return;
     }
@@ -482,6 +496,16 @@ function showLogin(): void {
   refresh();
 }
 
+function parseCliAuth(): { username?: string; password?: string } {
+  const args = process.argv.slice(2);
+  const userArg = args.find((a) => a.startsWith('--user='))?.split('=')[1];
+  const passArg = args.find((a) => a.startsWith('--password='))?.split('=')[1] ?? args.find((a) => a.startsWith('--pass='))?.split('=')[1];
+  if (userArg && passArg) {
+    return { username: userArg, password: passArg };
+  }
+  return {};
+}
+
 screen = blessed.screen({
   smartCSR: true,
   fullUnicode: true,
@@ -497,4 +521,18 @@ process.on('SIGINT', () => {
   cmdExit();
 });
 
-showLogin();
+const cliAuth = parseCliAuth();
+
+if (cliAuth.username && cliAuth.password) {
+  authHeader = `Basic ${Buffer.from(`${cliAuth.username}:${cliAuth.password}`).toString('base64')}`;
+  verifyCredentials(
+    authHeader,
+    () => buildMainUI(),
+    (msg: string) => {
+      console.log(`CLI auth failed: ${msg}`);
+      showLogin();
+    },
+  );
+} else {
+  showLogin();
+}

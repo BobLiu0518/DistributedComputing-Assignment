@@ -1,10 +1,10 @@
 import type { EmergencyType, DispatchRule, ActionType, ProcessorType } from './types.js';
 
 export const ACTIVEMQ_BASE_URL = 'https://mq.usst2.bobliu.tech';
+export const STOMP_BROKER_URL = 'wss://mq.usst2.bobliu.tech/ws/';
 export const VIRTUAL_TOPIC_NAME = 'VirtualTopic.campus.emergency';
-export const POLL_TIMEOUT_MS = 5000;
 
-export function consumerQueueName(processor: ProcessorType): string {
+export function consumerQueueName(processor: ProcessorType | 'dashboard'): string {
   return `Consumer.${processor}.${VIRTUAL_TOPIC_NAME}`;
 }
 
@@ -24,12 +24,6 @@ export const PROCESSOR_LABELS: Record<ProcessorType, string> = {
   'medical-dispatcher': '医疗调度器',
 };
 
-export const NODE_LABELS: Record<NodeRole, string> = {
-  ...PROCESSOR_LABELS,
-  dashboard: '监控中心',
-};
-
-/** 每个处理器负责的应急操作类型 */
 export const PROCESSOR_ACTIONS: Record<ProcessorType, ActionType[]> = {
   'gate-controller': ['gate_open', 'gate_lock'],
   'sms-sender': ['sms_all', 'sms_security', 'sms_medical'],
@@ -92,7 +86,7 @@ export const DISPATCH_RULES: Record<EmergencyType, DispatchRule> = {
   恐怖袭击: {
     actions: [
       { type: 'alarm', label: '启动恐袭警报' },
-      { type: 'gate_lock', label: '全校闸机锁死' },
+      { type: 'gate_open', label: '全校闸机全开' },
       { type: 'sms_all', label: '全校紧急短信' },
     ],
   },
