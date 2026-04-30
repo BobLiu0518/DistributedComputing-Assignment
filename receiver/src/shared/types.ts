@@ -63,3 +63,21 @@ export interface NodeReport {
 export interface DispatchRule {
   actions: { type: ActionType; label: string }[];
 }
+
+export type AlertLevel = 'ok' | 'warn' | 'critical';
+
+export interface TopicStats {
+  enqueueCount: number;
+  dequeueCount: number;
+  consumerCount: number;
+  backlog: number;
+  timestamp: number;
+}
+
+export interface QueueAlert {
+  processor: ProcessorType;
+  label: string;
+  level: AlertLevel;
+  message: string;
+  stats: TopicStats;
+}

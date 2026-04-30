@@ -40,15 +40,21 @@
         font-size: 1.3rem;
         font-weight: 600;
         color: #1a1a2e;
+        display: flex;
+        align-items: center;
+        gap: 6px;
       }
       .header .status-dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
         background: #52c41a;
-        display: inline-block;
-        margin-right: 6px;
+        flex-shrink: 0;
         animation: pulse 2s infinite;
+      }
+      .header-title {
+        position: relative;
+        top: -1px;
       }
       @keyframes pulse {
         0%,
@@ -307,14 +313,135 @@
         color: #fff;
         border-color: #1890ff;
       }
+
+      .queue-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        padding: 12px 24px;
+      }
+      .queue-card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 12px 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        border-left: 3px solid #d9d9d9;
+        transition: all 0.3s;
+      }
+      .queue-card.ok {
+        border-left-color: #52c41a;
+      }
+      .queue-card.warn {
+        border-left-color: #faad14;
+        background: #fffbe6;
+      }
+      .queue-card.critical {
+        border-left-color: #f5222d;
+        background: #fff2f0;
+        animation: queuePulse 1.5s infinite;
+      }
+      @keyframes queuePulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.75;
+        }
+      }
+      .queue-card .qc-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .queue-card .qc-icon {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #d9d9d9;
+      }
+      .queue-card.ok .qc-icon {
+        background: #52c41a;
+      }
+      .queue-card.warn .qc-icon {
+        background: #faad14;
+      }
+      .queue-card.critical .qc-icon {
+        background: #f5222d;
+      }
+      .queue-card .qc-label {
+        font-weight: 600;
+        font-size: 0.82rem;
+      }
+      .queue-card .qc-body {
+        display: flex;
+        gap: 16px;
+        font-size: 0.75rem;
+        color: #888;
+      }
+      .queue-card .qc-body span {
+        white-space: nowrap;
+      }
+      .queue-card.critical .qc-body,
+      .queue-card.warn .qc-body {
+        color: #595959;
+      }
+      .queue-card .qc-msg {
+        font-size: 0.72rem;
+        margin-top: 4px;
+        color: #999;
+      }
+      .queue-card.warn .qc-msg {
+        color: #d48806;
+      }
+      .queue-card.critical .qc-msg {
+        color: #cf1322;
+      }
+
+      .alert-banner {
+        padding: 10px 24px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        background: #fff2f0;
+        color: #cf1322;
+        border-bottom: 1px solid #ffccc7;
+        animation: alertPulse 1.5s infinite;
+      }
+      @keyframes alertPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
     </style>
   </head>
   <body v-scope>
     <div class="header">
       <div>
-        <h1><span class="status-dot"></span>校园应急监控中心</h1>
+        <h1><span class="status-dot"></span><span class="header-title">校园应急监控中心</span></h1>
       </div>
       <div class="status-text">节点：{{ store.connectedNodes.join('、') || '无节点连接' }} | 消息总数：{{ totalMessages }}</div>
+    </div>
+
+    <div v-if="criticalQueues.length" class="alert-banner">
+      🚨 {{ criticalQueues.map(q => q.label).join('、') }} 消息堆积严重
+    </div>
+
+    <div class="queue-cards">
+      <div class="queue-card" :class="q.level" v-for="q in store.queueAlerts">
+        <div class="qc-header">
+          <span class="qc-icon"></span>
+          <span class="qc-label">{{ q.label }}</span>
+        </div>
+        <div class="qc-body">
+          <span>📦 堆积 {{ q.stats.backlog }}</span>
+          <span>👤 消费者 {{ q.stats.consumerCount }}</span>
+        </div>
+        <div class="qc-msg">{{ q.message }}</div>
+      </div>
+      <div v-if="store.queueAlerts.length === 0" style="grid-column:1/-1;text-align:center;color:#bbb;padding:10px;font-size:0.85rem;">
+        <template v-if="store.monitorActive">监控运行中，暂无消费者队列（等待处理器连接）</template>
+        <template v-else>堆积监控未启动（启动 Dashboard 时加 --user --pass 参数）</template>
+      </div>
     </div>
 
     <div class="stats-row">
@@ -399,6 +526,8 @@
         filterType: 'all',
         connectedNodes: [],
         reports: [],
+        queueAlerts: [],
+        monitorActive: false,
       });
 
       const socket = io();
@@ -410,6 +539,12 @@
         store.reports.unshift(report);
         if (store.reports.length > 500) store.reports.length = 500;
         store.connectedNodes = [...new Set(store.reports.map((r) => r.nodeLabel || r.node))];
+      });
+      socket.on('monitor:active', (active) => {
+        store.monitorActive = active;
+      });
+      socket.on('monitor:queues', (alerts) => {
+        store.queueAlerts = alerts || [];
       });
 
       PetiteVue.createApp({
@@ -474,6 +609,10 @@
 
         statusLabel(s) {
           return { pending: '等待', running: '执行中', done: '已完成', error: '失败' }[s] || s;
+        },
+
+        get criticalQueues() {
+          return this.store.queueAlerts.filter((q) => q.level === 'critical');
         },
       }).mount();
     </script>

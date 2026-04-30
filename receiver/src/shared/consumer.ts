@@ -1,10 +1,14 @@
-import { ACTIVEMQ_BASE_URL, TOPIC_NAME, POLL_TIMEOUT_MS } from './constants.js';
+import { ACTIVEMQ_BASE_URL, POLL_TIMEOUT_MS } from './constants.js';
 import type { EmergencyMessage } from './types.js';
 
 let authHeader = '';
 
 export function setAuth(username: string, password: string): void {
   authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+}
+
+export function getAuthHeader(): string {
+  return authHeader;
 }
 
 export async function verifyConnection(): Promise<{ ok: boolean; message: string }> {
@@ -25,8 +29,8 @@ export async function verifyConnection(): Promise<{ ok: boolean; message: string
   }
 }
 
-export async function consumeOne(clientId: string): Promise<EmergencyMessage | null> {
-  const url = `${ACTIVEMQ_BASE_URL}/api/message/${TOPIC_NAME}?type=topic&clientId=${encodeURIComponent(clientId)}&json=true&timeout=${POLL_TIMEOUT_MS}`;
+export async function consumeOne(queueName: string, clientId: string): Promise<EmergencyMessage | null> {
+  const url = `${ACTIVEMQ_BASE_URL}/api/message/${encodeURIComponent(queueName)}?type=queue&clientId=${encodeURIComponent(clientId)}&json=true&timeout=${POLL_TIMEOUT_MS}`;
 
   try {
     const res = await fetch(url, {
@@ -54,15 +58,16 @@ export async function consumeOne(clientId: string): Promise<EmergencyMessage | n
 }
 
 export async function consumeLoop(
+  queueName: string,
   clientId: string,
   onMessage: (msg: EmergencyMessage) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  console.log(`[consumer] 开始订阅主题 ${TOPIC_NAME} (clientId=${clientId})`);
+  console.log(`[consumer] 开始消费队列 ${queueName} (clientId=${clientId})`);
 
   while (!signal?.aborted) {
     try {
-      const msg = await consumeOne(clientId);
+      const msg = await consumeOne(queueName, clientId);
       if (msg) {
         onMessage(msg);
       }

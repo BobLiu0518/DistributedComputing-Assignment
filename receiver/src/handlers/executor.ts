@@ -22,11 +22,11 @@ export async function executeAction(
   onStatusChange?.({ ...action });
 
   const baseMs = ACTION_DELAYS[action.type] ?? 1000;
-  const ms = baseMs + Math.floor(Math.random() * baseMs * 0.5);
+  const workMs = baseMs + Math.floor(Math.random() * baseMs * 0.5);
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      await delay(attempt === 1 ? ms : Math.min(RETRY_BASE_MS * Math.pow(2, attempt - 1), 8000));
+      await delay(attempt === 1 ? workMs : Math.min(RETRY_BASE_MS * Math.pow(2, attempt - 1), 8000));
 
       if (Math.random() < 0.05) {
         throw new Error('设备响应超时');

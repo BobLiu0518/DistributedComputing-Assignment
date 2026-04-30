@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline';
 import { io, Socket } from 'socket.io-client';
 import { consumeLoop, setAuth, verifyConnection } from '../shared/consumer.js';
-import { DISPATCH_RULES, PROCESSOR_LABELS, PROCESSOR_ACTIONS, DASHBOARD_URL } from '../shared/constants.js';
+import { DISPATCH_RULES, PROCESSOR_LABELS, PROCESSOR_ACTIONS, consumerQueueName, DASHBOARD_URL } from '../shared/constants.js';
 import { createActionsForMessage, executeAction } from '../handlers/executor.js';
 import type { EmergencyMessage, ProcessorType, NodeReport, EmergencyAction } from '../shared/types.js';
 
@@ -14,15 +14,17 @@ function parseArgs(): { processor: ProcessorType; username: string; password: st
   const args = process.argv.slice(2);
   const processorArg = args.find((a) => a.startsWith('--processor='))?.split('=')[1] as ProcessorType | undefined;
   const userArg = args.find((a) => a.startsWith('--user='))?.split('=')[1];
-  const passArg = args.find((a) => a.startsWith('--pass='))?.split('=')[1];
+  const passArg =
+    args.find((a) => a.startsWith('--password='))?.split('=')[1] ??
+    args.find((a) => a.startsWith('--pass='))?.split('=')[1];
 
   if (!processorArg || !VALID_PROCESSORS.includes(processorArg)) {
-    console.error('用法: pnpm start --processor=gate-controller|sms-sender|alarm-controller|power-controller|valve-controller|medical-dispatcher --user=xxx --pass=xxx');
+    console.error('用法: pnpm start --processor=gate-controller|sms-sender|alarm-controller|power-controller|valve-controller|medical-dispatcher --user=xxx --password=xxx');
     process.exit(1);
   }
 
   if (!userArg || !passArg) {
-    console.error('请提供 ActiveMQ 凭证: --user=xxx --pass=xxx');
+    console.error('请提供 ActiveMQ 凭证: --user=xxx --password=xxx');
     process.exit(1);
   }
 
@@ -129,7 +131,10 @@ async function main(): Promise<void> {
   console.log('输入 quit/exit 退出，Ctrl+C 亦可');
   console.log('等待接收紧急消息...\n');
 
-  await consumeLoop(clientId, handleMessage, abortController.signal);
+  const queueName = consumerQueueName(processor);
+  console.log(`消费队列: ${queueName}`);
+
+  await consumeLoop(queueName, clientId, handleMessage, abortController.signal);
 }
 
 main().catch((err) => {

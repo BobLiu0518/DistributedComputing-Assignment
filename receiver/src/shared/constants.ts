@@ -1,8 +1,16 @@
 import type { EmergencyType, DispatchRule, ActionType, ProcessorType } from './types.js';
 
 export const ACTIVEMQ_BASE_URL = 'https://mq.usst2.bobliu.tech';
-export const TOPIC_NAME = 'campus.emergency';
+export const VIRTUAL_TOPIC_NAME = 'VirtualTopic.campus.emergency';
 export const POLL_TIMEOUT_MS = 5000;
+
+export function consumerQueueName(processor: ProcessorType): string {
+  return `Consumer.${processor}.${VIRTUAL_TOPIC_NAME}`;
+}
+
+export const MONITOR_INTERVAL_MS = 10_000;
+export const BACKLOG_WARN_THRESHOLD = 500;
+export const BACKLOG_CRITICAL_THRESHOLD = 2000;
 
 export const DASHBOARD_PORT = 3456;
 export const DASHBOARD_URL = `http://localhost:${DASHBOARD_PORT}`;

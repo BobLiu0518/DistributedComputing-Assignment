@@ -4,7 +4,7 @@ import locationCategories from '../data/locations.json';
 import emergencies from '../data/emergencies.json';
 
 const ACTIVEMQ_BASE_URL = 'https://mq.usst2.bobliu.tech';
-const TOPIC_NAME = 'campus.emergency';
+const TOPIC_NAME = 'VirtualTopic.campus.emergency';
 const BATCH_SIZE = 50;
 const INTERVAL_MS = 1000;
 const PROMPT = 'MQ-Sensor > ';

@@ -1,6 +1,6 @@
 # MQ 校园应急响应系统
 
-基于 ActiveMQ 的分布式校园应急信号收发与监控系统（发布/订阅模式）。
+基于 ActiveMQ Virtual Topic 的分布式校园应急信号收发与监控系统（发布/订阅 + 持久消费）。
 
 ## 架构
 
@@ -8,43 +8,43 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         ActiveMQ Broker                             │
 │                   https://mq.usst2.bobliu.tech                      │
-│                   Topic: campus.emergency                           │
-└──────────┬─────────────────────────────────┬────────────────────────┘
-           │  POST (REST API)                │ GET long-polling (REST API)
-           │                                 │
-    ┌──────▼──────┐              ┌───────────┼───────────┐
-    │   sender/   │              │           │           │
-    │  (发送端)    │       ┌──────▼──┐  ┌─────▼───┐  ┌───▼──────┐
-    │  TUI 界面   │       │ 闸机    │  │ 短信    │  │ 监控中心  │
-    │  批量发送   │       │ 控制器   │  │ 发送器   │  │ Dashboard │
-    │  到 Topic   │       │ 进程1    │  │ 进程2    │  │ + Web UI  │
-    └─────────────┘       │ ...更多   │  │ ...更多   │  └─────┬─────┘
-                          └────┬─────┘  └────┬─────┘        │
-                               │             │              │
-                               │  WebSocket  │              │
-                               └─────────┬───┘              │
-                                         │                  │
-                                   Socket.io ───────────────┘
-                                         │
-                                  ┌──────▼──────┐
-                                  │   Browser   │
-                                  │  监控界面    │
-                                  │ Petite-Vue  │
-                                  └─────────────┘
+│           VirtualTopic.campus.emergency                             │
+│                                                                     │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐     │
+│  │ Consumer.gate-   │ │ Consumer.sms-    │ │ Consumer.alarm-  │     │
+│  │ controller.      │ │ sender.          │ │ controller.      │     │
+│  │ VirtualTopic...  │ │ VirtualTopic...  │ │ VirtualTopic...  │     │
+│  │   (持久 Queue)    │ │   (持久 Queue)    │ │   (持久 Queue)    │     │
+│  └────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘     │
+└───────────┼────────────────────┼────────────────────┼───────────────┘
+            │ REST GET           │                    │
+     ┌──────▼──┐          ┌──────▼──┐          ┌──────▼──┐
+     │ 闸机    │          │ 短信    │          │ 警报    │  ... 更多
+     │ 控制器   │          │ 发送器   │          │ 控制器   │
+     │ 实例N   │          │ 实例N   │          │ 实例N   │
+     └────┬────┘          └────┬────┘          └────┬────┘
+          │                    │                    │   WebSocket
+          └────────────────────┼────────────────────┘
+                               │
+                         Socket.io ─────────── Dashboard + Web UI
 ```
+
+**Virtual Topic 语义：** 生产者发到 `VirtualTopic.campus.emergency`，每个消费者组自动创建独立的持久 Queue `Consumer.{processor}.VirtualTopic...`。同组内多实例共享一个 Queue（竞争消费），消费者离线后消息持久堆积不丢失。
 
 ### 发送端 (sender/)
 
 - TypeScript + Node.js + blessed 终端界面
-- 通过 ActiveMQ REST API 向 Topic 发布紧急事件消息
+- 通过 ActiveMQ REST API 向 VirtualTopic 发布紧急事件消息
 - 支持 start/stop/exit 命令控制发送
 - 每次发送 50 条消息，间隔 1 秒
 
-### 接收端 (receiver/) — 发布/订阅模式
+### 接收端 (receiver/) — Virtual Topic 模式
 
 - TypeScript + Node.js 多进程架构
 - 每个进程通过 `--processor=` 参数指定处理器类型
-- 所有处理器订阅同一 Topic `campus.emergency`，各自过滤负责的操作
+- 各处理器从独立持久 Queue `Consumer.{processor}.VirtualTopic.campus.emergency` 消费
+- 同处理器可启动多个实例，共享一个 Queue（竞争消费，负载均衡）
+- 处理器离线期间消息持久堆积，恢复后继续消费
 - 应急操作为模拟耗时任务，延迟为基准值 × (1.0 ~ 1.5) 随机浮动
 - 操作状态通过 Socket.io 实时上报 Dashboard
 
@@ -119,10 +119,17 @@ cd ../receiver && pnpm install
 
 ```bash
 cd receiver
+
+# 基础模式（无堆积监控）
 pnpm dashboard
+
+# 带堆积监控（需 ActiveMQ 凭据）
+pnpm dashboard --user=YOUR_USERNAME --pass=YOUR_PASSWORD
 ```
 
 打开浏览器访问 `http://localhost:3456`
+
+Dashboard 提供 Topic 堆积实时监控（需凭据）：每 10s 查询 Jolokia JMX，堆积 ≥500 警告，≥2000 严重告警。
 
 ### 3. 启动接收端处理器
 
