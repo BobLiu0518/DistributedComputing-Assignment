@@ -1,16 +1,34 @@
-import type { EmergencyType, DispatchRule, NodeRole, ActionType } from './types.js';
+import type { EmergencyType, DispatchRule, ActionType, ProcessorType } from './types.js';
 
 export const ACTIVEMQ_BASE_URL = 'https://mq.usst2.bobliu.tech';
-export const QUEUE_NAME = 'campus.emergency';
+export const TOPIC_NAME = 'campus.emergency';
 export const POLL_TIMEOUT_MS = 5000;
 
 export const DASHBOARD_PORT = 3456;
 export const DASHBOARD_URL = `http://localhost:${DASHBOARD_PORT}`;
 
+export const PROCESSOR_LABELS: Record<ProcessorType, string> = {
+  'gate-controller': '闸机控制器',
+  'sms-sender': '短信发送器',
+  'alarm-controller': '警报控制器',
+  'power-controller': '电源控制器',
+  'valve-controller': '水阀控制器',
+  'medical-dispatcher': '医疗调度器',
+};
+
 export const NODE_LABELS: Record<NodeRole, string> = {
-  security: '保卫处',
-  medical: '医务室',
+  ...PROCESSOR_LABELS,
   dashboard: '监控中心',
+};
+
+/** 每个处理器负责的应急操作类型 */
+export const PROCESSOR_ACTIONS: Record<ProcessorType, ActionType[]> = {
+  'gate-controller': ['gate_open', 'gate_lock'],
+  'sms-sender': ['sms_all', 'sms_security', 'sms_medical'],
+  'alarm-controller': ['alarm'],
+  'power-controller': ['power_cut'],
+  'valve-controller': ['valve_close'],
+  'medical-dispatcher': ['medical_dispatch'],
 };
 
 export const ACTION_LABELS: Record<ActionType, string> = {
@@ -39,28 +57,24 @@ export const ACTION_DELAYS: Partial<Record<ActionType, number>> = {
 
 export const DISPATCH_RULES: Record<EmergencyType, DispatchRule> = {
   火灾: {
-    nodes: ['security'],
     actions: [
       { type: 'alarm', label: '启动火灾警报' },
       { type: 'gate_open', label: '闸机全开（疏散通道）' },
     ],
   },
   燃气泄漏: {
-    nodes: ['security', 'medical'],
     actions: [
       { type: 'power_cut', label: '切断燃气区域电源' },
       { type: 'sms_all', label: '发送疏散短信' },
     ],
   },
   设备过热: {
-    nodes: ['security'],
     actions: [
       { type: 'alarm', label: '启动过热警报' },
       { type: 'power_cut', label: '切断故障设备电源' },
     ],
   },
   爆炸: {
-    nodes: ['security', 'medical'],
     actions: [
       { type: 'alarm', label: '启动爆炸警报' },
       { type: 'sms_all', label: '全校紧急短信' },
@@ -68,7 +82,6 @@ export const DISPATCH_RULES: Record<EmergencyType, DispatchRule> = {
     ],
   },
   恐怖袭击: {
-    nodes: ['security', 'medical'],
     actions: [
       { type: 'alarm', label: '启动恐袭警报' },
       { type: 'gate_lock', label: '全校闸机锁死' },
@@ -76,13 +89,11 @@ export const DISPATCH_RULES: Record<EmergencyType, DispatchRule> = {
     ],
   },
   水管爆裂: {
-    nodes: ['security'],
     actions: [
       { type: 'valve_close', label: '关闭区域水阀' },
     ],
   },
   非法入侵: {
-    nodes: ['security'],
     actions: [
       { type: 'alarm', label: '启动入侵警报' },
       { type: 'gate_lock', label: '锁定相关区域闸机' },
@@ -90,14 +101,12 @@ export const DISPATCH_RULES: Record<EmergencyType, DispatchRule> = {
     ],
   },
   人员伤亡: {
-    nodes: ['medical'],
     actions: [
       { type: 'medical_dispatch', label: '医疗队紧急调度' },
       { type: 'sms_medical', label: '通知医务室准备急救' },
     ],
   },
   生化泄漏: {
-    nodes: ['security', 'medical'],
     actions: [
       { type: 'alarm', label: '启动生化泄漏警报' },
       { type: 'power_cut', label: '切断实验室电源' },
@@ -105,26 +114,22 @@ export const DISPATCH_RULES: Record<EmergencyType, DispatchRule> = {
     ],
   },
   打架斗殴: {
-    nodes: ['security'],
     actions: [
       { type: 'sms_security', label: '短信通知保安到场' },
     ],
   },
   食物中毒: {
-    nodes: ['medical'],
     actions: [
       { type: 'sms_medical', label: '通知医务室准备救治' },
       { type: 'medical_dispatch', label: '医疗队赶赴食堂' },
     ],
   },
   电梯困人: {
-    nodes: ['security'],
     actions: [
       { type: 'sms_security', label: '通知保安联系电梯维保' },
     ],
   },
   踩踏事件: {
-    nodes: ['security', 'medical'],
     actions: [
       { type: 'alarm', label: '启动踩踏警报' },
       { type: 'medical_dispatch', label: '医疗队紧急调度' },

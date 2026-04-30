@@ -1,18 +1,23 @@
 import { createInterface } from 'node:readline';
 import { io, Socket } from 'socket.io-client';
 import { consumeLoop, setAuth, verifyConnection } from '../shared/consumer.js';
-import { DISPATCH_RULES, NODE_LABELS, DASHBOARD_URL } from '../shared/constants.js';
+import { DISPATCH_RULES, PROCESSOR_LABELS, PROCESSOR_ACTIONS, DASHBOARD_URL } from '../shared/constants.js';
 import { createActionsForMessage, executeAction } from '../handlers/executor.js';
-import type { EmergencyMessage, NodeRole, NodeReport, EmergencyAction } from '../shared/types.js';
+import type { EmergencyMessage, ProcessorType, NodeReport, EmergencyAction } from '../shared/types.js';
 
-function parseArgs(): { node: NodeRole; username: string; password: string } {
+const VALID_PROCESSORS: readonly ProcessorType[] = [
+  'gate-controller', 'sms-sender', 'alarm-controller',
+  'power-controller', 'valve-controller', 'medical-dispatcher',
+];
+
+function parseArgs(): { processor: ProcessorType; username: string; password: string } {
   const args = process.argv.slice(2);
-  const nodeArg = args.find((a) => a.startsWith('--node='))?.split('=')[1] as NodeRole | undefined;
+  const processorArg = args.find((a) => a.startsWith('--processor='))?.split('=')[1] as ProcessorType | undefined;
   const userArg = args.find((a) => a.startsWith('--user='))?.split('=')[1];
   const passArg = args.find((a) => a.startsWith('--pass='))?.split('=')[1];
 
-  if (!nodeArg || !['security', 'medical'].includes(nodeArg)) {
-    console.error('用法: pnpm start --node=security|medical --user=xxx --pass=xxx');
+  if (!processorArg || !VALID_PROCESSORS.includes(processorArg)) {
+    console.error('用法: pnpm start --processor=gate-controller|sms-sender|alarm-controller|power-controller|valve-controller|medical-dispatcher --user=xxx --pass=xxx');
     process.exit(1);
   }
 
@@ -21,16 +26,18 @@ function parseArgs(): { node: NodeRole; username: string; password: string } {
     process.exit(1);
   }
 
-  return { node: nodeArg, username: userArg, password: passArg };
+  return { processor: processorArg, username: userArg, password: passArg };
 }
 
 async function main(): Promise<void> {
-  const { node, username, password } = parseArgs();
-  const nodeLabel = NODE_LABELS[node];
-  const clientId = `receiver-${node}-${Date.now()}`;
+  const { processor, username, password } = parseArgs();
+  const nodeLabel = PROCESSOR_LABELS[processor];
+  const myActions = PROCESSOR_ACTIONS[processor];
+  const clientId = `processor-${processor}-${Date.now()}`;
 
-  console.log(`\n=== MQ 接收端 - ${nodeLabel} ===`);
-  console.log(`节点ID: ${clientId}`);
+  console.log(`\n=== MQ 订阅处理器 - ${nodeLabel} ===`);
+  console.log(`处理器ID: ${clientId}`);
+  console.log(`负责操作: ${myActions.join(', ')}`);
 
   setAuth(username, password);
   const verify = await verifyConnection();
@@ -52,7 +59,7 @@ async function main(): Promise<void> {
   socket.on('connect_error', (err) => console.log(`[${nodeLabel}] Dashboard 连接失败: ${err.message}`));
 
   function reportAction(action: EmergencyAction): void {
-    const report: NodeReport = { node, nodeLabel, action };
+    const report: NodeReport = { node: processor, nodeLabel, action };
     socket.emit('node:action', report);
   }
 
@@ -61,11 +68,14 @@ async function main(): Promise<void> {
     if (!rule) {
       return;
     }
-    if (!rule.nodes.includes(node)) {
+
+    // 从分发规则中筛选本处理器负责的操作
+    const processorActions = rule.actions.filter((a) => myActions.includes(a.type));
+    if (processorActions.length === 0) {
       return;
     }
 
-    const actions = createActionsForMessage(msg, node, rule.actions);
+    const actions = createActionsForMessage(msg, processor, processorActions);
     console.log(`[${nodeLabel}] 收到 #${msg.seq} ${msg.type} @ ${msg.location} → ${actions.length} 个操作`);
 
     for (const action of actions) {

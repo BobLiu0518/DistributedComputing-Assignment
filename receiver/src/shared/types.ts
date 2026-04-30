@@ -20,7 +20,15 @@ export interface EmergencyMessage {
   seq: number;
 }
 
-export type NodeRole = 'security' | 'medical' | 'dashboard';
+export type ProcessorType =
+  | 'gate-controller'
+  | 'sms-sender'
+  | 'alarm-controller'
+  | 'power-controller'
+  | 'valve-controller'
+  | 'medical-dispatcher';
+
+export type NodeRole = ProcessorType | 'dashboard';
 
 export type ActionType =
   | 'alarm'
@@ -52,6 +60,5 @@ export interface NodeReport {
 }
 
 export interface DispatchRule {
-  nodes: NodeRole[];
   actions: { type: ActionType; label: string }[];
 }

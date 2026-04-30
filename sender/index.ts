@@ -3,7 +3,7 @@ import locationCategories from '../data/locations.json';
 import emergencies from '../data/emergencies.json';
 
 const ACTIVEMQ_BASE_URL = 'https://mq.usst2.bobliu.tech';
-const QUEUE_NAME = 'campus.emergency';
+const TOPIC_NAME = 'campus.emergency';
 const BATCH_SIZE = 50;
 const INTERVAL_MS = 1000;
 const PROMPT = 'MQ-Sensor > ';
@@ -86,7 +86,7 @@ function refresh(): void {
 }
 
 async function sendOne(msg: Message): Promise<SendResult> {
-  const url = `${ACTIVEMQ_BASE_URL}/api/message/${QUEUE_NAME}?type=queue`;
+  const url = `${ACTIVEMQ_BASE_URL}/api/message/${TOPIC_NAME}?type=topic`;
 
   try {
     const res = await fetch(url, {
@@ -193,7 +193,7 @@ function buildMainUI(): void {
 
   logLine('{cyan-fg}MQ Sensor{/cyan-fg}');
   logLine(`{cyan-fg}Target: ${ACTIVEMQ_BASE_URL}{/cyan-fg}`);
-  logLine(`{cyan-fg}Queue:  ${QUEUE_NAME}{/cyan-fg}`);
+  logLine(`{cyan-fg}Topic:  ${TOPIC_NAME}{/cyan-fg}`);
   logLine('{cyan-fg}---{/cyan-fg}');
   logLine('{white-fg}Commands:{/white-fg}');
   logLine('  {green-fg}start{/green-fg} - Begin sending messages');

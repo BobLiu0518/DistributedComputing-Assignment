@@ -1,6 +1,6 @@
 # MQ 校园应急响应系统
 
-基于 ActiveMQ 的分布式校园应急信号收发与监控系统。
+基于 ActiveMQ 的分布式校园应急信号收发与监控系统（发布/订阅模式）。
 
 ## 架构
 
@@ -8,17 +8,18 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         ActiveMQ Broker                             │
 │                   https://mq.usst2.bobliu.tech                      │
-│                      Queue: campus.emergency                        │
+│                   Topic: campus.emergency                           │
 └──────────┬─────────────────────────────────┬────────────────────────┘
            │  POST (REST API)                │ GET long-polling (REST API)
            │                                 │
     ┌──────▼──────┐              ┌───────────┼───────────┐
     │   sender/   │              │           │           │
     │  (发送端)    │       ┌──────▼──┐  ┌─────▼───┐  ┌───▼──────┐
-    │  TUI 界面   │       │ 保卫处   │  │ 医务室   │  │ 监控中心  │
-    │  批量发送   │       │ 接收端   │  │ 接收端   │  │ Dashboard │
-    └─────────────┘       │ 进程1    │  │ 进程2    │  │ + Web UI  │
-                          └────┬─────┘  └────┬─────┘  └─────┬─────┘
+    │  TUI 界面   │       │ 闸机    │  │ 短信    │  │ 监控中心  │
+    │  批量发送   │       │ 控制器   │  │ 发送器   │  │ Dashboard │
+    │  到 Topic   │       │ 进程1    │  │ 进程2    │  │ + Web UI  │
+    └─────────────┘       │ ...更多   │  │ ...更多   │  └─────┬─────┘
+                          └────┬─────┘  └────┬─────┘        │
                                │             │              │
                                │  WebSocket  │              │
                                └─────────┬───┘              │
@@ -35,17 +36,28 @@
 ### 发送端 (sender/)
 
 - TypeScript + Node.js + blessed 终端界面
-- 通过 ActiveMQ REST API 批量发送紧急事件消息
+- 通过 ActiveMQ REST API 向 Topic 发布紧急事件消息
 - 支持 start/stop/exit 命令控制发送
 - 每次发送 50 条消息，间隔 1 秒
 
-### 接收端 (receiver/)
+### 接收端 (receiver/) — 发布/订阅模式
 
 - TypeScript + Node.js 多进程架构
-- 通过 ActiveMQ REST API 长轮询消费消息
-- 每个进程通过 `--node=` 参数指定角色（security / medical / dashboard）
+- 每个进程通过 `--processor=` 参数指定处理器类型
+- 所有处理器订阅同一 Topic `campus.emergency`，各自过滤负责的操作
 - 应急操作为模拟耗时任务，延迟为基准值 × (1.0 ~ 1.5) 随机浮动
 - 操作状态通过 Socket.io 实时上报 Dashboard
+
+#### 处理器类型与职责
+
+| 处理器             | 负责操作                                       |
+| ------------------ | ---------------------------------------------- |
+| gate-controller    | gate_open（闸机全开）、gate_lock（闸机锁死）   |
+| sms-sender         | sms_all、sms_security、sms_medical（短信通知） |
+| alarm-controller   | alarm（启动警报）                              |
+| power-controller   | power_cut（切断电源）                          |
+| valve-controller   | valve_close（关闭水阀）                        |
+| medical-dispatcher | medical_dispatch（医疗调度）                   |
 
 ### 监控界面
 
@@ -112,19 +124,33 @@ pnpm dashboard
 
 打开浏览器访问 `http://localhost:3456`
 
-### 3. 启动接收端节点
+### 3. 启动接收端处理器
 
-分别在多个终端启动不同角色的接收端：
+分别在多个终端启动不同处理器：
 
 ```bash
 cd receiver
 
-# 保卫处节点
-pnpm start --node=security --user=YOUR_USERNAME --pass=YOUR_PASSWORD
+# 闸机控制器
+pnpm start --processor=gate-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
 
-# 医务室节点
-pnpm start --node=medical --user=YOUR_USERNAME --pass=YOUR_PASSWORD
+# 短信发送器
+pnpm start --processor=sms-sender --user=YOUR_USERNAME --pass=YOUR_PASSWORD
+
+# 警报控制器
+pnpm start --processor=alarm-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
+
+# 电源控制器
+pnpm start --processor=power-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
+
+# 水阀控制器
+pnpm start --processor=valve-controller --user=YOUR_USERNAME --pass=YOUR_PASSWORD
+
+# 医疗调度器
+pnpm start --processor=medical-dispatcher --user=YOUR_USERNAME --pass=YOUR_PASSWORD
 ```
+
+每个处理器可以启动多个实例，Topic 模式下所有实例都会收到每条消息，各自过滤处理。
 
 ### 4. 启动发送端
 
