@@ -17,7 +17,7 @@ import tech.bobliu.rpc.proto.app.RegisterRequest;
 import tech.bobliu.rpc.proto.app.RegisterResponse;
 
 @RpcApp(basePackage = "tech.bobliu.rpc.app", registryHost = "usst2.bobliu.tech", debug = true)
-public class RpcClientDemo {
+public class GachaApp {
     @RpcInject
     private UserServiceRpc userService;
 
@@ -37,7 +37,7 @@ public class RpcClientDemo {
         System.out.println();
 
         while (true) {
-            System.out.print("RPC Gacha > ");
+            System.out.print(currentUserName == null ? "RPC Gacha > " : "RPC Gacha: " + currentUserName + " > ");
             String line = scanner.nextLine().trim();
             if (line.isEmpty()) continue;
 
@@ -90,7 +90,7 @@ public class RpcClientDemo {
         if (currentUserId == 0) { System.out.println("  请先登录!"); return; }
         int count = 1;
         if (parts.length >= 2) {
-            try { count = (int) Float.parseFloat(parts[1]); } catch (NumberFormatException e) {}
+            try { count = (int) Float.parseFloat(parts[1]); } catch (NumberFormatException ignored) {}
         }
 
         DrawResponse resp = gachaService.draw(
@@ -98,11 +98,11 @@ public class RpcClientDemo {
         for (Card card : resp.getCardsList()) {
             String stars = switch (card.getStars()) {
                 case 6 -> "★★★★★★";
-                case 5 -> "★★★★★";
-                case 4 -> "★★★★";
-                default -> "★★★";
+                case 5 -> "　★★★★★";
+                case 4 -> "　　★★★★";
+                default -> "　　　★★★";
             };
-            System.out.printf("  %s: %s%n", stars, card.getName());
+            System.out.printf("  %s %s%n", stars, card.getName());
         }
     }
 }

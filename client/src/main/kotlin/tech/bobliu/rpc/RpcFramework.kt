@@ -56,7 +56,7 @@ class RpcFramework(
 
         return Proxy.newProxyInstance(
             interfaceClass.classLoader,
-            arrayOf<Class<*>>(interfaceClass),
+            arrayOf(interfaceClass),
             RpcInvocationHandler(serviceName, registryClient, rpcClient, debug = debug),
         )
     }
