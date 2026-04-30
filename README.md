@@ -16,6 +16,8 @@
 │  │ VirtualTopic...  │ │ VirtualTopic...  │ │ VirtualTopic...  │     │
 │  │   (持久 Queue)    │ │   (持久 Queue)    │ │   (持久 Queue)    │     │
 │  └────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘     │
+│           │                    │                    │               │
+│  Dashboard ──── Jolokia JMX ───┘ (每10s查堆积)      │               │
 └───────────┼────────────────────┼────────────────────┼───────────────┘
             │ REST GET           │                    │
      ┌──────▼──┐          ┌──────▼──┐          ┌──────▼──┐
@@ -63,8 +65,11 @@
 
 - Express + Socket.io 提供 WebSocket 服务
 - Petite-Vue 驱动的纯前端卡片式面板
+- **6 处理器队列卡片**（3×2 网格），绿/黄/红 实时状态 + 脉冲告警动画
+- 严重堆积时显示红色告警横幅
 - 实时显示消息流、操作状态、统计数据
 - 支持按紧急类型筛选
+- Jolokia JMX 每 10s 轮询各消费者 Queue 的 EnqueueCount / DequeueCount / ConsumerCount
 
 ## 消息格式
 
@@ -73,7 +78,8 @@
   "type": "火灾",
   "location": "第一教学楼",
   "timestamp": 1714459200000,
-  "seq": 42
+  "seq": 42,
+  "msgid": "a1b2c3d4-e5f6-..."
 }
 ```
 
@@ -82,7 +88,8 @@
 | type      | string | 紧急事件类型，共 13 种  |
 | location  | string | 具体建筑名称，共 50+ 个 |
 | timestamp | number | 毫秒时间戳              |
-| seq       | number | 消息递增序号            |
+| seq       | number | 消息递增序号（客户端，重启归零） |
+| msgid     | string | UUID，全局唯一标识，用于处理器去重 |
 
 ## 应急事件分发规则
 
@@ -129,7 +136,7 @@ pnpm dashboard --user=YOUR_USERNAME --pass=YOUR_PASSWORD
 
 打开浏览器访问 `http://localhost:3456`
 
-Dashboard 提供 Topic 堆积实时监控（需凭据）：每 10s 查询 Jolokia JMX，堆积 ≥500 警告，≥2000 严重告警。
+Dashboard 提供各处理器队列堆积实时监控（需凭据）：每 10s 通过 Jolokia JMX 查询，堆积 ≥500 黄色警告，≥2000 红色严重告警，无消费者时同样红色。
 
 ### 3. 启动接收端处理器
 
@@ -157,7 +164,7 @@ pnpm start --processor=valve-controller --user=YOUR_USERNAME --pass=YOUR_PASSWOR
 pnpm start --processor=medical-dispatcher --user=YOUR_USERNAME --pass=YOUR_PASSWORD
 ```
 
-每个处理器可以启动多个实例，Topic 模式下所有实例都会收到每条消息，各自过滤处理。
+每个处理器可以启动多个实例，同一处理器类型的多个实例共享一个 Queue（竞争消费，负载均衡）。每个操作有 5% 模拟失败率，3 次重试（指数退避 1s→2s→4s）。
 
 ### 4. 启动发送端
 
@@ -192,12 +199,13 @@ MQ/
     └── src/
         ├── shared/
         │   ├── types.ts    # 类型定义
-        │   ├── constants.ts # 配置 + 分发规则
-        │   └── consumer.ts  # ActiveMQ REST 消费者
+        │   ├── constants.ts # 配置 + 分发规则 + 处理器定义
+        │   ├── consumer.ts  # ActiveMQ REST 消费者
+        │   └── monitor.ts   # Jolokia JMX 队列监控
         ├── handlers/
-        │   └── executor.ts  # 应急操作执行器
+        │   └── executor.ts  # 应急操作执行器（3次重试 + 退避）
         ├── node/
-        │   └── main.ts      # 接收端节点主进程
+        │   └── main.ts      # 处理器主进程
         └── dashboard/
-            └── server.ts    # Dashboard 服务端
+            └── server.ts    # Dashboard + Socket.io 服务端
 ```
